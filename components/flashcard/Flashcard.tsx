@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import {
   Card,
   CardContent,
@@ -12,13 +17,32 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+
+// Add CSS for flair animation
+const flairStyle = `
+  @keyframes flair-up {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-30px) scale(1.2); }
+  }
+  .flair-animation {
+    position: absolute;
+    top: -25px; /* Position above the button */
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #4ade80; /* Green color for positive feedback */
+    animation: flair-up 0.7s ease-out forwards;
+    pointer-events: none; /* Prevent interaction */
+    z-index: 10;
+  }
+`;
 
 interface FlashcardProps {
   token: string;
+  onReviewComplete?: () => void;
 }
-
-// Remove unused CardType
-// type CardType = "kanji" | "phrase";
 
 interface Reading {
   word: string;
@@ -51,16 +75,61 @@ interface CardResponse {
   status: "review" | "new";
 }
 
-export function Flashcard({ token }: FlashcardProps) {
+export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
   const [currentCard, setCurrentCard] = useState<CardResponse | null>(null);
+  const [preloadedCard, setPreloadedCard] = useState<CardResponse | null>(null); // State for preloaded card
   const [isLoading, setIsLoading] = useState(true);
   const [isRevealed, setIsRevealed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [flair, setFlair] = useState<{ id: number; quality: number } | null>(null);
   const { toast } = useToast();
-  const fetchNextCard = useCallback(async () => {
-    setIsLoading(true);
-    setIsRevealed(false);
-    setError(null);
+  const flipSoundRef = useRef<HTMLAudioElement | null>(null);
+  const dingSoundRef = useRef<HTMLAudioElement | null>(null);
+  const isFetchingRef = useRef(false); // Ref to prevent concurrent fetches
+  const isPreloadingRef = useRef(false); // Ref to prevent concurrent preloads
+
+  // Inject flair CSS
+  useEffect(() => {
+    const styleElement = document.createElement("style");
+    styleElement.innerHTML = flairStyle;
+    document.head.appendChild(styleElement);
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
+
+  // Initialize audio on client side
+  useEffect(() => {
+    flipSoundRef.current = new Audio("/sounds/flipcard.mp3");
+    dingSoundRef.current = new Audio("/sounds/ding.mp3");
+  }, []);
+
+  // Modified playSound to accept potentially null ref and check internally
+  const playSound = (soundRef: React.RefObject<HTMLAudioElement | null>) => {
+    if (soundRef.current) {
+      soundRef.current.play().catch(err => console.error("Error playing sound:", err));
+    }
+  };
+
+  // Wrap handleReveal in useCallback as it's used in useEffect dependency array
+  const handleReveal = useCallback(() => {
+    if (!isRevealed) {
+      setIsRevealed(true);
+      playSound(flipSoundRef); // No need for null check here anymore
+    }
+  }, [isRevealed]); // Added isRevealed dependency
+
+  // Wrap showFlair in useCallback as it's used in submitReview dependency array
+  const showFlair = useCallback((quality: number) => {
+    setFlair({ id: Date.now(), quality });
+    playSound(dingSoundRef); // No need for null check here anymore
+    setTimeout(() => setFlair(null), 700);
+  }, []); // Empty dependency array as it doesn't depend on props/state
+
+  // Function to preload the next card
+  const preloadNextCard = useCallback(async () => {
+    if (isPreloadingRef.current || isFetchingRef.current) return; // Prevent concurrent preloads/fetches
+    isPreloadingRef.current = true;
     try {
       const response = await fetch("/api/cards/next", {
         headers: {
@@ -68,41 +137,89 @@ export function Flashcard({ token }: FlashcardProps) {
         },
       });
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`,
-        );
+        // Don't throw error for preload, just log it
+        console.error(`Preload failed: ${response.status}`);
+        setPreloadedCard(null); // Clear preload if failed
+        return;
       }
       const data = await response.json();
       if (data.card) {
-        setCurrentCard(data);
+        setPreloadedCard(data);
       } else {
-        setCurrentCard(null); // No more cards
-        toast({
-          title: "All Done!",
-          description: data.message || "No more cards for now.",
-        });
+        setPreloadedCard(null); // No more cards to preload
       }
     } catch (err) {
-      // Fix: Use Error type
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to load the next card.";
-      console.error("Failed to fetch next card:", err);
-      setError(errorMessage);
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      console.error("Failed to preload next card:", err);
+      setPreloadedCard(null); // Clear preload on error
     } finally {
-      setIsLoading(false);
+      isPreloadingRef.current = false;
     }
-  }, [token, toast]);
+  }, [token]);
+
+  // Function to fetch or use preloaded card
+  const fetchOrUsePreloadedCard = useCallback(async () => {
+    if (isFetchingRef.current) return; // Prevent concurrent fetches
+    isFetchingRef.current = true;
+    setIsLoading(true);
+    setIsRevealed(false);
+    setError(null);
+
+    if (preloadedCard) {
+      // Use preloaded card
+      setCurrentCard(preloadedCard);
+      setPreloadedCard(null);
+      setIsLoading(false);
+      isFetchingRef.current = false;
+      // Trigger preload for the *next* card immediately
+      preloadNextCard();
+    } else {
+      // Fetch current card if no preload available
+      try {
+        const response = await fetch("/api/cards/next", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(
+            errorData.error || `HTTP error! status: ${response.status}`,
+          );
+        }
+        const data = await response.json();
+        if (data.card) {
+          setCurrentCard(data);
+          // Trigger preload for the *next* card after fetching current
+          preloadNextCard();
+        } else {
+          setCurrentCard(null);
+          toast({
+            title: "All Done!",
+            description: data.message || "No more cards for now.",
+          });
+        }
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to load the next card.";
+        console.error("Failed to fetch next card:", err);
+        setError(errorMessage);
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+        isFetchingRef.current = false;
+      }
+    }
+  }, [token, toast, preloadedCard, preloadNextCard]);
 
   const submitReview = useCallback(
     async (quality: number) => {
-      if (!currentCard) return;
-      setIsLoading(true); // Indicate loading state during submission
+      if (!currentCard || isFetchingRef.current) return; // Prevent review submission while fetching
+      showFlair(quality); // Show flair and play sound
+      // Don't set isLoading true here, let fetchOrUsePreloadedCard handle it
       try {
         const response = await fetch("/api/cards/review", {
           method: "POST",
@@ -122,10 +239,10 @@ export function Flashcard({ token }: FlashcardProps) {
             errorData.error || `HTTP error! status: ${response.status}`,
           );
         }
-        // Fetch the next card after successful review
-        fetchNextCard();
+        onReviewComplete?.();
+        // Fetch the next card (will use preloaded if available)
+        fetchOrUsePreloadedCard();
       } catch (err) {
-        // Fix: Use Error type
         const errorMessage =
           err instanceof Error ? err.message : "Failed to save review.";
         console.error("Failed to submit review:", err);
@@ -134,24 +251,30 @@ export function Flashcard({ token }: FlashcardProps) {
           description: errorMessage,
           variant: "destructive",
         });
-        setIsLoading(false); // Stop loading if submission failed
+        // Don't set isLoading false here, fetchOrUsePreloadedCard handles it
       }
-      // No finally block for setIsLoading(false) here, as fetchNextCard handles it
     },
-    [currentCard, token, fetchNextCard, toast],
+    [
+      currentCard,
+      token,
+      fetchOrUsePreloadedCard,
+      toast,
+      onReviewComplete,
+      showFlair, // Added showFlair to dependency array
+    ],
   );
 
-  // Add keyboard event handler
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (isLoading) return; // Don't handle keyboard events while loading
-
+      // Allow space/reveal even if fetching next card, but not review keys
       if (e.code === "Space") {
-        e.preventDefault(); // Prevent page scroll
-        if (!isRevealed) {
-          setIsRevealed(true);
-        }
+         if (isLoading && !currentCard) return; // Still block if initial load
+         e.preventDefault();
+         handleReveal();
+         return;
       }
+
+      if (isFetchingRef.current) return; // Block review keys if fetching
 
       if (isRevealed && currentCard) {
         switch (e.key) {
@@ -177,31 +300,39 @@ export function Flashcard({ token }: FlashcardProps) {
 
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [isRevealed, isLoading, currentCard, submitReview]);
+  }, [isRevealed, isLoading, currentCard, submitReview, handleReveal]); // Added handleReveal to dependency array
 
+  // Initial fetch on mount
   useEffect(() => {
-    fetchNextCard();
-  }, [fetchNextCard]);
+    fetchOrUsePreloadedCard();
+  }, [fetchOrUsePreloadedCard]);
 
-  const renderCardContent = () => {
-    if (!currentCard) {
+  const renderCardFace = (isBackFace = false) => {
+    // Use currentCard for rendering
+    const cardToRender = currentCard;
+
+    if (!cardToRender) {
       return (
-        <p className="text-center p-4">
-          No more cards for now. Check back later!
-        </p>
+        <Card className="w-full h-full flex items-center justify-center">
+          <CardContent>
+            <p className="text-center p-4">
+              No more cards for now. Check back later!
+            </p>
+          </CardContent>
+        </Card>
       );
     }
 
-    const cardData = currentCard.card;
+    const cardData = cardToRender.card;
 
     return (
-      <>
+      <Card className="w-full h-full flex flex-col">
         <CardHeader>
           <CardTitle className="text-6xl text-center mb-4">
             {cardData.type === "kanji" ? cardData.character : cardData.phrase}
           </CardTitle>
           <CardDescription className="text-center">
-            {currentCard.status === "new" ? "New Card" : "Review Card"}
+            {cardToRender.status === "new" ? "New Card" : "Review Card"}
             {cardData.isCommon && " (Common)"}
             {cardData.jlptLevel && ` (JLPT N${cardData.jlptLevel})`}
             {cardData.type === "kanji" &&
@@ -209,8 +340,8 @@ export function Flashcard({ token }: FlashcardProps) {
               ` (Grade ${cardData.grade})`}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4 min-h-[150px]">
-          {isRevealed ? (
+        <CardContent className="space-y-4 flex-grow flex flex-col justify-center">
+          {isBackFace ? (
             <>
               <div>
                 <h4 className="font-semibold mb-1">Readings:</h4>
@@ -250,42 +381,50 @@ export function Flashcard({ token }: FlashcardProps) {
               )}
             </>
           ) : (
-            <div className="flex justify-center items-center h-full">
-              <Button onClick={() => setIsRevealed(true)}>Reveal Answer</Button>
+            <div className="flex justify-center items-center">
+              {/* Disable reveal button slightly if fetching next card */}
+              <Button onClick={handleReveal} disabled={isFetchingRef.current && !currentCard}>Reveal Answer</Button>
             </div>
           )}
         </CardContent>
-        <CardFooter className="flex justify-around">
-          {isRevealed ? (
+        <CardFooter className="flex justify-around mt-auto relative">
+          {isBackFace ? (
             <>
-              {/* Quality: 1=Fail(no idea), 2=Fail(hard), 3=Pass(good), 4=Pass(easy) */}
               <Button
                 variant="destructive"
                 onClick={() => submitReview(1)}
-                disabled={isLoading}
+                disabled={isFetchingRef.current} // Disable if fetching next card
+                className="relative"
               >
                 Again (1)
+                {flair?.quality === 1 && <span key={flair.id} className="flair-animation">-1</span>}
               </Button>
               <Button
                 variant="outline"
                 onClick={() => submitReview(2)}
-                disabled={isLoading}
+                disabled={isFetchingRef.current}
+                className="relative"
               >
                 Hard (2)
+                 {flair?.quality === 2 && <span key={flair.id} className="flair-animation">+0</span>}
               </Button>
               <Button
                 variant="outline"
                 onClick={() => submitReview(3)}
-                disabled={isLoading}
+                disabled={isFetchingRef.current}
+                className="relative"
               >
                 Good (3)
+                 {flair?.quality === 3 && <span key={flair.id} className="flair-animation">+1</span>}
               </Button>
               <Button
                 variant="default"
                 onClick={() => submitReview(4)}
-                disabled={isLoading}
+                disabled={isFetchingRef.current}
+                className="relative"
               >
                 Easy (4)
+                 {flair?.quality === 4 && <span key={flair.id} className="flair-animation">+2</span>}
               </Button>
             </>
           ) : (
@@ -294,7 +433,7 @@ export function Flashcard({ token }: FlashcardProps) {
             </span>
           )}
         </CardFooter>
-      </>
+      </Card>
     );
   };
 
@@ -306,7 +445,7 @@ export function Flashcard({ token }: FlashcardProps) {
         </CardHeader>
         <CardContent>
           <p className="text-destructive">{error}</p>
-          <Button onClick={fetchNextCard} className="mt-4">
+          <Button onClick={fetchOrUsePreloadedCard} className="mt-4">
             Try Again
           </Button>
         </CardContent>
@@ -314,25 +453,53 @@ export function Flashcard({ token }: FlashcardProps) {
     );
   }
 
+  // Show skeleton only during the very initial load
+  const showInitialSkeleton = isLoading && !currentCard && !preloadedCard;
+
   return (
-    <Card className="w-full">
-      {isLoading ? (
-        <div className="space-y-4 p-6">
-          <Skeleton className="h-16 w-1/2 mx-auto" />
-          <Skeleton className="h-4 w-1/4 mx-auto" />
-          <div className="min-h-[150px] flex justify-center items-center">
-            <Skeleton className="h-10 w-24" />
+    <div className="perspective w-full">
+      <div className={cn("flip-card w-full", { flipped: isRevealed })}>
+        <div className="flip-card-inner">
+          <div className="flip-card-front">
+            {showInitialSkeleton ? (
+              <Card className="w-full h-full flex flex-col">
+                <CardContent className="flex-grow flex flex-col justify-center items-center">
+                  <Skeleton className="h-16 w-1/2 mx-auto mb-4" />
+                  <Skeleton className="h-4 w-1/4 mx-auto mb-8" />
+                  <Skeleton className="h-10 w-24" />
+                </CardContent>
+                <CardFooter className="flex justify-around mt-auto">
+                   <Skeleton className="h-6 w-1/2" />
+                </CardFooter>
+              </Card>
+            ) : (
+              renderCardFace(false)
+            )}
           </div>
-          <div className="flex justify-around">
-            <Skeleton className="h-10 w-16" />
-            <Skeleton className="h-10 w-16" />
-            <Skeleton className="h-10 w-16" />
-            <Skeleton className="h-10 w-16" />
+          <div className="flip-card-back">
+            {showInitialSkeleton ? (
+              <Card className="w-full h-full flex flex-col">
+                 <CardContent className="flex-grow flex flex-col justify-center items-center">
+                    <Skeleton className="h-16 w-1/2 mx-auto mb-4" />
+                    <Skeleton className="h-4 w-1/4 mx-auto mb-8" />
+                    <Skeleton className="h-4 w-3/4 mb-2" />
+                    <Skeleton className="h-4 w-3/4 mb-2" />
+                    <Skeleton className="h-4 w-3/4 mb-2" />
+                 </CardContent>
+                 <CardFooter className="flex justify-around mt-auto">
+                    <Skeleton className="h-10 w-16" />
+                    <Skeleton className="h-10 w-16" />
+                    <Skeleton className="h-10 w-16" />
+                    <Skeleton className="h-10 w-16" />
+                 </CardFooter>
+              </Card>
+            ) : (
+              renderCardFace(true)
+            )}
           </div>
         </div>
-      ) : (
-        renderCardContent()
-      )}
-    </Card>
+      </div>
+    </div>
   );
 }
+
