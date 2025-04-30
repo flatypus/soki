@@ -1,8 +1,10 @@
-# Kanji Learning Application
+# Sōki (想起)
+
+<img width="1177" alt="image" src="https://github.com/user-attachments/assets/e5bdab91-461c-4157-8cdc-652ba1fb1eef" />
 
 ## Project Overview
 
-This project is a web application designed to help users learn Japanese Kanji and phrases using a spaced repetition system (SRS). It features user authentication, tracks learning progress, and presents flashcards in an optimal order based on user knowledge and character/phrase dependencies.
+This project is a web application designed to help users learn Japanese Kanji and phrases using a spaced repetition system (SRS). It features user authentication, tracks learning progress, and presents flashcards in an optimal order based on user knowledge and character/phrase dependencies (also a cool attempt to test out Manus lol)
 
 ## Features
 
@@ -95,11 +97,4 @@ _(Protected endpoints require a valid JWT in the `Authorization: Bearer <token>`
 3.  **Login:** Log in with your credentials.
 4.  **Flashcards:** The main page will display the next flashcard (Kanji or Phrase). Reveal the answer and indicate your recall difficulty (e.g., Easy, Good, Hard) to update the SRS schedule.
 5.  **Progress:** View your learning summary.
-
-## Deployment Notes
-
-*   A temporary public URL has been provided for testing: [http://3000-ivyawryna3kln9lu9lsev-a7e4866e.manus.computer](http://3000-ivyawryna3kln9lu9lsev-a7e4866e.manus.computer)
-*   **This URL is temporary and will expire.**
-*   Permanent deployment using the standard tools encountered issues, likely due to environment limitations regarding Next.js server-side features.
-*   For persistent deployment, further investigation into compatible hosting platforms or adjustments to the application structure (e.g., separating frontend and backend) might be necessary.
 
