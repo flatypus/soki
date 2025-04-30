@@ -57,7 +57,6 @@ export function Flashcard({ token }: FlashcardProps) {
   const [isRevealed, setIsRevealed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-
   const fetchNextCard = useCallback(async () => {
     setIsLoading(true);
     setIsRevealed(false);
@@ -100,44 +99,85 @@ export function Flashcard({ token }: FlashcardProps) {
     }
   }, [token, toast]);
 
-  const submitReview = async (quality: number) => {
-    if (!currentCard) return;
-    setIsLoading(true); // Indicate loading state during submission
-    try {
-      const response = await fetch("/api/cards/review", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          cardId: currentCard.card.id,
-          cardType: currentCard.card.type,
-          quality: quality,
-        }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`,
-        );
+  const submitReview = useCallback(
+    async (quality: number) => {
+      if (!currentCard) return;
+      setIsLoading(true); // Indicate loading state during submission
+      try {
+        const response = await fetch("/api/cards/review", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            cardId: currentCard.card.id,
+            cardType: currentCard.card.type,
+            quality: quality,
+          }),
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(
+            errorData.error || `HTTP error! status: ${response.status}`,
+          );
+        }
+        // Fetch the next card after successful review
+        fetchNextCard();
+      } catch (err) {
+        // Fix: Use Error type
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to save review.";
+        console.error("Failed to submit review:", err);
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        setIsLoading(false); // Stop loading if submission failed
       }
-      // Fetch the next card after successful review
-      fetchNextCard();
-    } catch (err) {
-      // Fix: Use Error type
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to save review.";
-      console.error("Failed to submit review:", err);
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      setIsLoading(false); // Stop loading if submission failed
-    }
-    // No finally block for setIsLoading(false) here, as fetchNextCard handles it
-  };
+      // No finally block for setIsLoading(false) here, as fetchNextCard handles it
+    },
+    [currentCard, token, fetchNextCard, toast],
+  );
+
+  // Add keyboard event handler
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (isLoading) return; // Don't handle keyboard events while loading
+
+      if (e.code === "Space") {
+        e.preventDefault(); // Prevent page scroll
+        if (!isRevealed) {
+          setIsRevealed(true);
+        }
+      }
+
+      if (isRevealed && currentCard) {
+        switch (e.key) {
+          case "1":
+          case "a":
+            submitReview(1);
+            break;
+          case "2":
+          case "s":
+            submitReview(2);
+            break;
+          case "3":
+          case "d":
+            submitReview(3);
+            break;
+          case "4":
+          case "f":
+            submitReview(4);
+            break;
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, [isRevealed, isLoading, currentCard, submitReview]);
 
   useEffect(() => {
     fetchNextCard();
@@ -218,7 +258,7 @@ export function Flashcard({ token }: FlashcardProps) {
         <CardFooter className="flex justify-around">
           {isRevealed ? (
             <>
-              {/* Quality: 0=Fail(no idea), 1=Fail(slight idea), 2=Fail(got it wrong), 3=Pass(hard), 4=Pass(good), 5=Pass(easy) */}
+              {/* Quality: 1=Fail(no idea), 2=Fail(hard), 3=Pass(good), 4=Pass(easy) */}
               <Button
                 variant="destructive"
                 onClick={() => submitReview(1)}
@@ -228,24 +268,24 @@ export function Flashcard({ token }: FlashcardProps) {
               </Button>
               <Button
                 variant="outline"
-                onClick={() => submitReview(3)}
+                onClick={() => submitReview(2)}
                 disabled={isLoading}
               >
-                Hard (3)
+                Hard (2)
               </Button>
               <Button
                 variant="outline"
-                onClick={() => submitReview(4)}
+                onClick={() => submitReview(3)}
                 disabled={isLoading}
               >
-                Good (4)
+                Good (3)
               </Button>
               <Button
                 variant="default"
-                onClick={() => submitReview(5)}
+                onClick={() => submitReview(4)}
                 disabled={isLoading}
               >
-                Easy (5)
+                Easy (4)
               </Button>
             </>
           ) : (
