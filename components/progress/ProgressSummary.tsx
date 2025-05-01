@@ -86,7 +86,7 @@ export const ProgressSummary = forwardRef<
   // State for pagination
   const [currentPageKanji, setCurrentPageKanji] = useState(1);
   const [currentPagePhrase, setCurrentPagePhrase] = useState(1);
-  const [pageSize, setPageSize] = useState(50); // Match backend default
+  const [pageSize] = useState(50); // Match backend default, removed unused setPageSize
   // State to hold the item currently selected for the dialog
   const [selectedItem, setSelectedItem] = useState<ReviewedItemDetail | null>(null);
 
@@ -125,7 +125,7 @@ export const ProgressSummary = forwardRef<
     } finally {
       setIsLoading(false);
     }
-  }, [token]);
+  }, [token, currentPageKanji, currentPagePhrase, pageSize]); // Added missing dependencies
 
   // Function to set the selected item for the dialog
   const handleItemClick = useCallback((item: ReviewedItemDetail) => {
@@ -366,7 +366,7 @@ export const ProgressSummary = forwardRef<
         </CardHeader>
         <CardContent>
           <p className="text-destructive">{error}</p>
-          <Button onClick={fetchSummary} className="mt-4">
+          <Button onClick={() => fetchSummary()} className="mt-4">
             Try Again
           </Button>
         </CardContent>
