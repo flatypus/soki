@@ -326,9 +326,10 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
     const cardData = cardToRender.card;
 
     return (
-      <Card className="w-full h-full flex flex-col">
-        <CardHeader>
-          <CardTitle className="text-6xl text-center mb-4">
+      // Removed h-full from Card, let content dictate height
+      <Card className="w-full flex flex-col">
+        <CardHeader className="pt-4 pb-2"> {/* Reduced padding */} 
+          <CardTitle className="text-6xl text-center mb-2"> {/* Reduced margin */} 
             {cardData.type === "kanji" ? cardData.character : cardData.phrase}
           </CardTitle>
           <CardDescription className="text-center">
@@ -340,7 +341,8 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
               ` (Grade ${cardData.grade})`}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4 flex-grow flex flex-col justify-center">
+        {/* Removed flex-grow, adjusted padding/spacing */}
+        <CardContent className="space-y-2 py-2"> 
           {isBackFace ? (
             <>
               <div>
@@ -381,13 +383,14 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
               )}
             </>
           ) : (
-            <div className="flex justify-center items-center">
-              {/* Disable reveal button slightly if fetching next card */}
+            // Removed surrounding div, button is centered by CardContent's default behavior or text-center
+            <div className="text-center"> {/* Center button */} 
               <Button onClick={handleReveal} disabled={isFetchingRef.current && !currentCard}>Reveal Answer</Button>
             </div>
           )}
         </CardContent>
-        <CardFooter className="flex justify-around mt-auto relative">
+        {/* Reduced top margin */}
+        <CardFooter className="flex justify-around pt-2 pb-4 relative"> 
           {isBackFace ? (
             <>
               <Button
@@ -462,13 +465,13 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
         <div className="flip-card-inner">
           <div className="flip-card-front">
             {showInitialSkeleton ? (
-              <Card className="w-full h-full flex flex-col">
-                <CardContent className="flex-grow flex flex-col justify-center items-center">
-                  <Skeleton className="h-16 w-1/2 mx-auto mb-4" />
-                  <Skeleton className="h-4 w-1/4 mx-auto mb-8" />
+              <Card className="w-full flex flex-col"> {/* Removed h-full */} 
+                <CardContent className="flex-grow flex flex-col justify-center items-center py-4"> {/* Added padding */} 
+                  <Skeleton className="h-16 w-1/2 mx-auto mb-2" /> {/* Reduced margin */} 
+                  <Skeleton className="h-4 w-1/4 mx-auto mb-4" /> {/* Reduced margin */} 
                   <Skeleton className="h-10 w-24" />
                 </CardContent>
-                <CardFooter className="flex justify-around mt-auto">
+                <CardFooter className="flex justify-around pt-2 pb-4"> {/* Adjusted padding */} 
                    <Skeleton className="h-6 w-1/2" />
                 </CardFooter>
               </Card>
@@ -478,20 +481,21 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
           </div>
           <div className="flip-card-back">
             {showInitialSkeleton ? (
-              <Card className="w-full h-full flex flex-col">
-                 <CardContent className="flex-grow flex flex-col justify-center items-center">
-                    <Skeleton className="h-16 w-1/2 mx-auto mb-4" />
-                    <Skeleton className="h-4 w-1/4 mx-auto mb-8" />
-                    <Skeleton className="h-4 w-3/4 mb-2" />
-                    <Skeleton className="h-4 w-3/4 mb-2" />
-                    <Skeleton className="h-4 w-3/4 mb-2" />
-                 </CardContent>
-                 <CardFooter className="flex justify-around mt-auto">
-                    <Skeleton className="h-10 w-16" />
-                    <Skeleton className="h-10 w-16" />
-                    <Skeleton className="h-10 w-16" />
-                    <Skeleton className="h-10 w-16" />
-                 </CardFooter>
+              // Skeleton for back face (can be similar or different)
+              <Card className="w-full flex flex-col"> {/* Removed h-full */} 
+                <CardContent className="flex-grow flex flex-col justify-center items-center py-4"> {/* Added padding */} 
+                  <Skeleton className="h-16 w-1/2 mx-auto mb-2" />
+                  <Skeleton className="h-4 w-1/4 mx-auto mb-4" />
+                  <Skeleton className="h-4 w-3/4 mb-2" />
+                  <Skeleton className="h-4 w-3/4 mb-2" />
+                  <Skeleton className="h-4 w-1/2 mb-4" />
+                </CardContent>
+                <CardFooter className="flex justify-around pt-2 pb-4"> {/* Adjusted padding */} 
+                   <Skeleton className="h-10 w-16" />
+                   <Skeleton className="h-10 w-16" />
+                   <Skeleton className="h-10 w-16" />
+                   <Skeleton className="h-10 w-16" />
+                </CardFooter>
               </Card>
             ) : (
               renderCardFace(true)

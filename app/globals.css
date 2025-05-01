@@ -127,21 +127,20 @@
 .flip-card {
   position: relative; /* Keep relative for perspective context */
   width: 100%;
-  /* Ensure the container has a minimum height to contain the card */
-  min-height: 400px; /* Adjust as needed based on content */
+  /* Removed min-height, let content dictate height */
 }
 
 .flip-card-inner {
   position: relative; /* Keep relative */
   width: 100%;
-  height: 100%; /* Make inner container fill the parent height */
-  min-height: inherit; /* Inherit min-height from parent */
+  /* height: 100%; Removed, let grid handle height based on content */
+  /* min-height: inherit; Removed */
   text-align: center;
   transition: transform 0.4s;
   transform-style: preserve-3d;
   display: grid; /* Use grid for overlay */
   grid-template-columns: 1fr;
-  grid-template-rows: 1fr; /* Make row fill the container */
+  grid-template-rows: auto; /* Let row height be determined by content */
 }
 
 .flip-card.flipped .flip-card-inner {
@@ -151,7 +150,7 @@
 .flip-card-front,
 .flip-card-back {
   width: 100%;
-  height: 100%; /* Ensure faces fill the grid cell */
+  /* height: 100%; Removed, let content dictate height */
   -webkit-backface-visibility: hidden; /* Safari */
   backface-visibility: hidden;
   grid-area: 1 / 1 / 2 / 2; /* Place both in the same grid cell */
@@ -165,22 +164,13 @@
 }
 
 /* Ensure the shadcn Card component fills the face */
-.flip-card-front > .shadcn-card-class, /* Replace .shadcn-card-class with actual class if needed */
-.flip-card-back > .shadcn-card-class {
-  flex-grow: 1; /* Make the card grow to fill the flex container */
-  display: flex;
-  flex-direction: column;
-  height: 100%; /* Explicitly set height */
-}
-
-/* If the Card component itself doesn't have a specific class, target its direct child div */
+/* Target the direct child div of the front/back faces */
 .flip-card-front > div,
 .flip-card-back > div {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    width: 100%;
+    display: flex; /* Ensure the Card uses flex */
+    flex-direction: column; /* Ensure vertical layout */
+    width: 100%; /* Ensure full width */
+    /* height: 100%; Removed, let content dictate height */
 }
 
 

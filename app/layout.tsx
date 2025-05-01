@@ -44,7 +44,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning> {/* Add suppressHydrationWarning for theme provider */}
+    <html lang="en" suppressHydrationWarning>{/* Removed extra space before closing bracket */}
       <body className={inter.className}>
         <ThemeProvider
             attribute="class"
