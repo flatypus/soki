@@ -6,7 +6,7 @@ import {
   kanji,
   phrases,
 } from "@/drizzle/schema";
-import { sql, eq, count, avg, desc } from "drizzle-orm";
+import { sql, eq, count, avg, desc, asc } from "drizzle-orm";
 
 // Define skill level thresholds
 const LEARNED_SKILL_THRESHOLD = 0.6; // Consider an item learned if skill >= 0.6
@@ -26,9 +26,59 @@ export async function GET(request: NextRequest) {
     const pageKanji = parseInt(searchParams.get("pageKanji") || "1", 10);
     const pagePhrase = parseInt(searchParams.get("pagePhrase") || "1", 10);
     const pageSize = parseInt(searchParams.get("pageSize") || "50", 10); // Default page size 50
+    const kanjiSortBy = searchParams.get("kanjiSortBy") || "lastReviewed_desc"; // Default sort
+    const phraseSortBy = searchParams.get("phraseSortBy") || "lastReviewed_desc"; // Default sort
 
     const offsetKanji = (pageKanji - 1) * pageSize;
     const offsetPhrase = (pagePhrase - 1) * pageSize;
+
+    // --- Define Kanji Sorting Logic ---
+    let kanjiOrderBy;
+    switch (kanjiSortBy) {
+      case "frequency_asc":
+        kanjiOrderBy = [asc(kanji.frequency), asc(userKanjiProgress.lastReviewed)];
+        break;
+      case "frequency_desc":
+        kanjiOrderBy = [desc(kanji.frequency), asc(userKanjiProgress.lastReviewed)];
+        break;
+      case "skill_asc":
+        kanjiOrderBy = [asc(userKanjiProgress.skill), asc(userKanjiProgress.lastReviewed)];
+        break;
+      case "skill_desc":
+        kanjiOrderBy = [desc(userKanjiProgress.skill), asc(userKanjiProgress.lastReviewed)];
+        break;
+      case "lastReviewed_asc":
+        kanjiOrderBy = [asc(userKanjiProgress.lastReviewed)];
+        break;
+      case "lastReviewed_desc":
+      default:
+        kanjiOrderBy = [desc(userKanjiProgress.lastReviewed)];
+        break;
+    }
+
+    // --- Define Phrase Sorting Logic ---
+    let phraseOrderBy;
+    switch (phraseSortBy) {
+      case "jlptLevel_asc": // Proxy for commonality/difficulty
+        phraseOrderBy = [asc(phrases.jlptLevel), asc(userPhraseProgress.lastReviewed)];
+        break;
+      case "jlptLevel_desc":
+        phraseOrderBy = [desc(phrases.jlptLevel), asc(userPhraseProgress.lastReviewed)];
+        break;
+      case "skill_asc":
+        phraseOrderBy = [asc(userPhraseProgress.skill), asc(userPhraseProgress.lastReviewed)];
+        break;
+      case "skill_desc":
+        phraseOrderBy = [desc(userPhraseProgress.skill), asc(userPhraseProgress.lastReviewed)];
+        break;
+      case "lastReviewed_asc":
+        phraseOrderBy = [asc(userPhraseProgress.lastReviewed)];
+        break;
+      case "lastReviewed_desc":
+      default:
+        phraseOrderBy = [desc(userPhraseProgress.lastReviewed)];
+        break;
+    }
 
     // --- Kanji Progress ---
     const kanjiStats = await db
@@ -99,7 +149,7 @@ export async function GET(request: NextRequest) {
         lastReviewed: true,
         reviewCount: true, // Added reviewCount
       },
-      orderBy: [desc(userKanjiProgress.lastReviewed)], // Order by last reviewed
+      orderBy: kanjiOrderBy, // Apply dynamic sorting
       limit: pageSize,
       offset: offsetKanji,
     });
@@ -123,7 +173,7 @@ export async function GET(request: NextRequest) {
             lastReviewed: true,
             reviewCount: true, // Added reviewCount
         },
-        orderBy: [desc(userPhraseProgress.lastReviewed)],
+        orderBy: phraseOrderBy, // Apply dynamic sorting
         limit: pageSize,
         offset: offsetPhrase,
     });

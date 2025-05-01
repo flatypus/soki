@@ -16,7 +16,7 @@ import { sql, eq, and, lte, asc, notInArray } from "drizzle-orm";
 // Constants for learning logic
 // const NEW_KANJI_PER_SESSION = 5; // Keep for potential future use, commented out for now
 // const NEW_PHRASES_PER_SESSION = 3; // Keep for potential future use, commented out for now
-const MIN_KANJI_SKILL_FOR_PHRASE = 0.2; // Lowered threshold: Minimum skill level for constituent kanji before showing phrase
+const MIN_KANJI_SKILL_FOR_PHRASE = 0.3; // User requested threshold: Minimum skill level for constituent kanji before showing phrase
 
 // Define a more specific type for the review card
 type ReviewCard =

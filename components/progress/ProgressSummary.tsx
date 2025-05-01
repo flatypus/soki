@@ -21,6 +21,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Add Select import
 
 interface ProgressSummaryProps {
   token: string;
@@ -82,6 +83,9 @@ export const ProgressSummary = forwardRef<
   const [currentPageKanji, setCurrentPageKanji] = useState(1);
   const [currentPagePhrase, setCurrentPagePhrase] = useState(1);
   const [pageSize] = useState(50); // Match backend default, removed unused setPageSize
+  // State for sorting
+  const [kanjiSort, setKanjiSort] = useState("lastReviewed_desc"); // Default sort
+  const [phraseSort, setPhraseSort] = useState("lastReviewed_desc"); // Default sort
   // State to hold the item currently selected for the dialog
   const [selectedItem, setSelectedItem] = useState<ReviewedItemDetail | null>(
     null,
@@ -97,6 +101,8 @@ export const ProgressSummary = forwardRef<
         url.searchParams.append("pageKanji", pageKanji.toString());
         url.searchParams.append("pagePhrase", pagePhrase.toString());
         url.searchParams.append("pageSize", pageSize.toString());
+        url.searchParams.append("kanjiSortBy", kanjiSort); // Add sort param
+        url.searchParams.append("phraseSortBy", phraseSort); // Add sort param
 
         const response = await fetch(url.toString(), {
           headers: {
@@ -123,8 +129,8 @@ export const ProgressSummary = forwardRef<
         setIsLoading(false);
       }
     },
-    [token, currentPageKanji, currentPagePhrase, pageSize],
-  ); // Added missing dependencies
+    [token, currentPageKanji, currentPagePhrase, pageSize, kanjiSort, phraseSort],
+  ); // Added sort states to dependencies
 
   // Function to set the selected item for the dialog
   const handleItemClick = useCallback((item: ReviewedItemDetail) => {
@@ -170,14 +176,9 @@ export const ProgressSummary = forwardRef<
       );
     }
 
-    // Sort items: by skill descending
-    const sortedItems = [...items].sort((a, b) => {
-      return parseFloat(b.skill) - parseFloat(a.skill);
-    });
-
     return (
       <div className="flex flex-wrap gap-1.5">
-        {sortedItems.map((item) => (
+        {items.map((item) => ( // Use items directly, no sortedItems
           <Dialog key={`${type}-${item.id}`}>
             <DialogTrigger asChild>
               <button
@@ -319,7 +320,7 @@ export const ProgressSummary = forwardRef<
         ))}
       </div>
     );
-  };
+  }
 
   // Pagination handlers
   const handlePageChangeKanji = (newPage: number) => {
@@ -457,6 +458,22 @@ export const ProgressSummary = forwardRef<
             <span className="mx-1.5">|</span>
             Reviewed: {summary.kanji.totalReviewed}
           </p>
+          {/* Add Kanji Sort Dropdown */}
+          <div className="flex justify-end mb-2">
+            <Select value={kanjiSort} onValueChange={setKanjiSort}>
+              <SelectTrigger className="w-[180px] h-8 text-xs">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="lastReviewed_desc">Last Reviewed (Newest)</SelectItem>
+                <SelectItem value="lastReviewed_asc">Last Reviewed (Oldest)</SelectItem>
+                <SelectItem value="skill_desc">Skill (Highest)</SelectItem>
+                <SelectItem value="skill_asc">Skill (Lowest)</SelectItem>
+                <SelectItem value="frequency_asc">Frequency (Most Common)</SelectItem>
+                <SelectItem value="frequency_desc">Frequency (Least Common)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="mt-3">
             {/* Pass the correct data path */}
             {renderProgressGrid(summary.kanji.reviewedItems, "kanji")}
@@ -484,6 +501,22 @@ export const ProgressSummary = forwardRef<
             <span className="mx-1.5">|</span>
             Reviewed: {summary.phrases.totalReviewed}
           </p>
+          {/* Add Phrase Sort Dropdown */}
+          <div className="flex justify-end mb-2">
+            <Select value={phraseSort} onValueChange={setPhraseSort}>
+              <SelectTrigger className="w-[180px] h-8 text-xs">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="lastReviewed_desc">Last Reviewed (Newest)</SelectItem>
+                <SelectItem value="lastReviewed_asc">Last Reviewed (Oldest)</SelectItem>
+                <SelectItem value="skill_desc">Skill (Highest)</SelectItem>
+                <SelectItem value="skill_asc">Skill (Lowest)</SelectItem>
+                <SelectItem value="jlptLevel_asc">JLPT Level (Easiest)</SelectItem>
+                <SelectItem value="jlptLevel_desc">JLPT Level (Hardest)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="mt-3">
             {/* Pass the correct data path */}
             {renderProgressGrid(summary.phrases.reviewedItems, "phrase")}
