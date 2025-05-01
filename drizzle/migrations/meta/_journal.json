@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1746006693712,
-      "tag": "0000_gigantic_bromley",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1746091981316,
-      "tag": "0001_many_sprite",
+      "when": 1746096735301,
+      "tag": "0000_dapper_mentallo",
       "breakpoints": true
     }
   ]
