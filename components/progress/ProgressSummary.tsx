@@ -7,12 +7,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -35,7 +30,7 @@ interface ProgressSummaryProps {
 interface ReviewedItemDetail {
   id: number;
   character?: string; // For Kanji
-  phrase?: string;    // For Phrases
+  phrase?: string; // For Phrases
   skill: string; // API sends as string
   definitions: string[];
   readings: { word: string; reading: string }[];
@@ -88,44 +83,48 @@ export const ProgressSummary = forwardRef<
   const [currentPagePhrase, setCurrentPagePhrase] = useState(1);
   const [pageSize] = useState(50); // Match backend default, removed unused setPageSize
   // State to hold the item currently selected for the dialog
-  const [selectedItem, setSelectedItem] = useState<ReviewedItemDetail | null>(null);
+  const [selectedItem, setSelectedItem] = useState<ReviewedItemDetail | null>(
+    null,
+  );
 
-  const fetchSummary = useCallback(async (pageKanji = currentPageKanji, pagePhrase = currentPagePhrase) => {
-    setIsLoading(true); // Set loading true when fetching new page
-    setError(null);
-    try {
-      // Construct API endpoint with pagination parameters
-      const url = new URL(API_ENDPOINT, window.location.origin);
-      url.searchParams.append("pageKanji", pageKanji.toString());
-      url.searchParams.append("pagePhrase", pagePhrase.toString());
-      url.searchParams.append("pageSize", pageSize.toString());
+  const fetchSummary = useCallback(
+    async (pageKanji = currentPageKanji, pagePhrase = currentPagePhrase) => {
+      setIsLoading(true); // Set loading true when fetching new page
+      setError(null);
+      try {
+        // Construct API endpoint with pagination parameters
+        const url = new URL(API_ENDPOINT, window.location.origin);
+        url.searchParams.append("pageKanji", pageKanji.toString());
+        url.searchParams.append("pagePhrase", pagePhrase.toString());
+        url.searchParams.append("pageSize", pageSize.toString());
 
-      const response = await fetch(url.toString(),
-        {
+        const response = await fetch(url.toString(), {
           headers: {
             Authorization: `Bearer ${token}`,
           },
           cache: "no-store",
         });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`,
-        );
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(
+            errorData.error || `HTTP error! status: ${response.status}`,
+          );
+        }
+        const data: ProgressData = await response.json();
+        setSummary(data);
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : "Failed to load progress summary.";
+        console.error("Failed to fetch progress summary:", err);
+        setError(errorMessage);
+      } finally {
+        setIsLoading(false);
       }
-      const data: ProgressData = await response.json();
-      setSummary(data);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : "Failed to load progress summary.";
-      console.error("Failed to fetch progress summary:", err);
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [token, currentPageKanji, currentPagePhrase, pageSize]); // Added missing dependencies
+    },
+    [token, currentPageKanji, currentPagePhrase, pageSize],
+  ); // Added missing dependencies
 
   // Function to set the selected item for the dialog
   const handleItemClick = useCallback((item: ReviewedItemDetail) => {
@@ -182,18 +181,19 @@ export const ProgressSummary = forwardRef<
           <Dialog key={`${type}-${item.id}`}>
             <DialogTrigger asChild>
               <button
-                onClick={() => handleItemClick(item)} // Use handleItemClick
-                // Apply glass-filling effect styles
+                onClick={() => handleItemClick(item)}
                 className="w-7 h-7 rounded-md flex items-center justify-center text-lg font-bold relative overflow-hidden border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 group hover:border-gray-400 dark:hover:border-gray-500 transition-colors duration-150"
                 title={type === "kanji" ? item.character : item.phrase}
               >
-                {/* Inner div for fill effect */}
-                <div
-                  className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-blue-400 to-blue-600 dark:from-blue-500 dark:to-blue-700 transition-all duration-300 ease-in-out"
-                  style={{ height: `${parseFloat(item.skill) * 100}%` }}
-                ></div>
+                {/* Container for fill effect */}
+                <div className="absolute inset-0">
+                  <div
+                    className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-gray-50 to-gray-200 dark:from-gray-400 dark:to-gray-600 transition-all duration-300 ease-in-out"
+                    style={{ height: `${parseFloat(item.skill) * 100}%` }}
+                  ></div>
+                </div>
                 {/* Character/Phrase text, positioned above the fill */}
-                <span className="relative z-10 text-gray-800 dark:text-gray-100 group-hover:text-black dark:group-hover:text-white mix-blend-difference">
+                <span className="relative z-20 text-gray-800 dark:text-gray-100 group-hover:text-black dark:group-hover:text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.3)] dark:drop-shadow-[0_1px_1px_rgba(255,255,255,0.3)]">
                   {type === "kanji" ? item.character : item.phrase}
                 </span>
               </button>
@@ -204,84 +204,115 @@ export const ProgressSummary = forwardRef<
                 <>
                   <DialogHeader>
                     <DialogTitle className="text-5xl text-center mb-3">
-                      {
-                        selectedItem.character // Use selectedItem
-                          ? selectedItem.character
-                          : selectedItem.phrase
-                      }
+                      {selectedItem.character // Use selectedItem
+                        ? selectedItem.character
+                        : selectedItem.phrase}
                     </DialogTitle>
-                    <DialogDescription asChild className="text-center space-x-1">
-                      <div> {/* Render as div to allow Badge children */}
-                      {selectedItem.character && selectedItem.grade && (
-                        <Badge variant="secondary">Grade {selectedItem.grade}</Badge>
-                      )}
-                      {selectedItem.jlptLevel && (
-                        <Badge variant="secondary">JLPT N{selectedItem.jlptLevel}</Badge>
-                      )}
-                      {selectedItem.character && selectedItem.frequency !== 99999 && selectedItem.frequency !== null && (
-                          <Badge variant="outline">Freq: {selectedItem.frequency}</Badge>
+                    <DialogDescription
+                      asChild
+                      className="text-center space-x-1"
+                    >
+                      <div>
+                        {" "}
+                        {/* Render as div to allow Badge children */}
+                        {selectedItem.character && selectedItem.grade && (
+                          <Badge variant="secondary">
+                            Grade {selectedItem.grade}
+                          </Badge>
                         )}
+                        {selectedItem.jlptLevel && (
+                          <Badge variant="secondary">
+                            JLPT N{selectedItem.jlptLevel}
+                          </Badge>
+                        )}
+                        {selectedItem.character &&
+                          selectedItem.frequency !== 99999 &&
+                          selectedItem.frequency !== null && (
+                            <Badge variant="outline">
+                              Freq: {selectedItem.frequency}
+                            </Badge>
+                          )}
                       </div>
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-3 py-3 text-sm">
                     <div>
-                      <h4 className="font-medium text-gray-700 dark:text-gray-200 mb-1">Skill Level:</h4>
+                      <h4 className="font-medium text-gray-70 mb-1">
+                        Skill Level:
+                      </h4>
                       <Progress
                         value={parseFloat(selectedItem.skill) * 100} // Use selectedItem
                         className="w-full h-2 mb-1"
                       />
-                      <p className="text-xs text-gray-600 dark:text-gray-300">
-                        {selectedItem.skill} ({Math.round(parseFloat(selectedItem.skill) * 100)}%)
+                      <p className="text-xs text-gray-600">
+                        {selectedItem.skill} (
+                        {Math.round(parseFloat(selectedItem.skill) * 100)}%)
                       </p>
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-700 dark:text-gray-200 mb-1">Readings:</h4>
-                      <ul className="list-disc list-inside text-gray-700 dark:text-gray-200">
-                        {selectedItem.readings?.length > 0 ? selectedItem.readings.map((r, index) => (
-                          <li key={index}>
-                            {r.reading}{" "}
-                            {r.word &&
-                            r.word !==
-                              (selectedItem.character
-                                ? selectedItem.character
-                                : selectedItem.phrase)
-                              ? `(${r.word})`
-                              : ""}
-                          </li>
-                        )) : <li>No readings available</li>}
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-gray-700 dark:text-gray-200 mb-1">Definitions:</h4>
-                      <ul className="list-disc list-inside text-gray-700 dark:text-gray-200">
-                        {selectedItem.definitions?.length > 0 ? selectedItem.definitions.slice(0, 5).map((def, index) => (
-                          <li key={index}>{def}</li>
-                        )) : <li>No definitions available</li>}
-                        {selectedItem.definitions && selectedItem.definitions.length > 5 && (
-                          <li className="text-muted-foreground dark:text-gray-400">...and more</li>
+                      <h4 className="font-medium text-gray-700 mb-1">
+                        Readings:
+                      </h4>
+                      <ul className="list-disc list-inside text-gray-700">
+                        {selectedItem.readings?.length > 0 ? (
+                          selectedItem.readings.map((r, index) => (
+                            <li key={index}>
+                              {r.reading}{" "}
+                              {r.word &&
+                              r.word !==
+                                (selectedItem.character
+                                  ? selectedItem.character
+                                  : selectedItem.phrase)
+                                ? `(${r.word})`
+                                : ""}
+                            </li>
+                          ))
+                        ) : (
+                          <li>No readings available</li>
                         )}
                       </ul>
                     </div>
+                    <div>
+                      <h4 className="font-medium text-gray-700 mb-1">
+                        Definitions:
+                      </h4>
+                      <ul className="list-disc list-inside text-gray-700">
+                        {selectedItem.definitions?.length > 0 ? (
+                          selectedItem.definitions
+                            .slice(0, 5)
+                            .map((def, index) => <li key={index}>{def}</li>)
+                        ) : (
+                          <li>No definitions available</li>
+                        )}
+                        {selectedItem.definitions &&
+                          selectedItem.definitions.length > 5 && (
+                            <li className="text-muted-foreground">
+                              ...and more
+                            </li>
+                          )}
+                      </ul>
+                    </div>
                     {selectedItem.character && selectedItem.strokeCount && (
-                      <p className="text-xs text-muted-foreground dark:text-gray-400">
+                      <p className="text-xs text-muted-foreground">
                         Strokes: {selectedItem.strokeCount}
                       </p>
                     )}
-                    <p className="text-xs text-muted-foreground dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Reviewed: {selectedItem.reviewCount ?? 0} times
                     </p>
-                    <p className="text-xs text-muted-foreground dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Last Reviewed:{" "}
                       {selectedItem.lastReviewed
-                        ? new Date(selectedItem.lastReviewed).toLocaleDateString()
+                        ? new Date(
+                            selectedItem.lastReviewed,
+                          ).toLocaleDateString()
                         : "Never"}
                     </p>
                   </div>
                 </>
               )}
               {!selectedItem && (
-                  <p>Select an item to see details.</p> // Placeholder if no item selected
+                <p>Select an item to see details.</p> // Placeholder if no item selected
               )}
             </DialogContent>
           </Dialog>
@@ -304,7 +335,11 @@ export const ProgressSummary = forwardRef<
   };
 
   // Component to render pagination controls
-  const PaginationControls = ({ currentPage, totalPages, onPageChange }: {
+  const PaginationControls = ({
+    currentPage,
+    totalPages,
+    onPageChange,
+  }: {
     currentPage: number;
     totalPages: number;
     onPageChange: (newPage: number) => void;
@@ -411,12 +446,13 @@ export const ProgressSummary = forwardRef<
           </h4>
           <Progress
             value={kanjiLearnedPercent}
-            className="w-full mb-1 h-2.5 bg-gray-200 dark:bg-gray-700 [&>div]:bg-gradient-to-r [&>div]:from-blue-400 [&>div]:to-blue-600"
+            className="w-full mb-1 h-2.5 bg-gray-200 dark:bg-gray-700 [&>div]:bg-gradient-to-r [&>div]:from-gray-400 [&>div]:to-gray-600"
           />
           <p className="text-xs text-muted-foreground dark:text-gray-400">
-            {summary.kanji.learned} / {summary.kanji.total} Learned ({kanjiLearnedPercent}%)
+            {summary.kanji.learned} / {summary.kanji.total} Learned (
+            {kanjiLearnedPercent}%)
             <span className="mx-1.5">|</span>
-            {/* Parse averageSkill string to number for display */} 
+            {/* Parse averageSkill string to number for display */}
             Avg Skill: {parseFloat(summary.kanji.averageSkill).toFixed(2)}
             <span className="mx-1.5">|</span>
             Reviewed: {summary.kanji.totalReviewed}
@@ -429,7 +465,7 @@ export const ProgressSummary = forwardRef<
               totalPages={summary.kanji.totalPages}
               onPageChange={handlePageChangeKanji}
             />
-        </div>
+          </div>
         </div>
         <div>
           <h4 className="font-semibold mb-2 text-base text-gray-700 dark:text-gray-200">
@@ -440,9 +476,10 @@ export const ProgressSummary = forwardRef<
             className="w-full mb-1 h-2.5 bg-gray-200 dark:bg-gray-700 [&>div]:bg-gradient-to-r [&>div]:from-purple-400 [&>div]:to-purple-600"
           />
           <p className="text-xs text-muted-foreground dark:text-gray-400">
-            {summary.phrases.learned} / {summary.phrases.total} Learned ({phraseLearnedPercent}%)
+            {summary.phrases.learned} / {summary.phrases.total} Learned (
+            {phraseLearnedPercent}%)
             <span className="mx-1.5">|</span>
-            {/* Parse averageSkill string to number for display */} 
+            {/* Parse averageSkill string to number for display */}
             Avg Skill: {parseFloat(summary.phrases.averageSkill).toFixed(2)}
             <span className="mx-1.5">|</span>
             Reviewed: {summary.phrases.totalReviewed}
@@ -455,7 +492,7 @@ export const ProgressSummary = forwardRef<
               totalPages={summary.phrases.totalPages}
               onPageChange={handlePageChangePhrase}
             />
-        </div>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -463,4 +500,3 @@ export const ProgressSummary = forwardRef<
 });
 
 ProgressSummary.displayName = "ProgressSummary";
-

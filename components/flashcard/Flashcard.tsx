@@ -389,7 +389,7 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
           )}
         </CardContent>
         {isBackFace && (
-          <CardFooter className="flex justify-around pt-2 pb-4 relative">
+          <CardFooter className="flex justify-around pt-2 pb-4 relative w-[450px] mx-auto">
             <>
               <Button
                 variant="destructive"
