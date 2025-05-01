@@ -350,7 +350,7 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
         </CardHeader>
         <CardContent className="space-y-2 py-2 h-full grid place-items-center">
           {isBackFace ? (
-            <div className="max-w-[50%]">
+            <div className="max-w-[80%] overflow-y-auto max-h-[80px]">
               <div className="flex flex-row gap-[2px] flex-wrap text-sm">
                 <span className="font-semibold">Readings:</span>
                 {cardData.readings.map((r, index) => (
@@ -369,7 +369,7 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
               </div>
               <div className="flex flex-wrap text-sm gap-[2px]">
                 <span className="font-semibold">Definitions:</span>
-                {cardData.definitions.slice(0, 5).map((def, index) => (
+                {cardData.definitions.map((def, index) => (
                   <span key={index}>
                     {def}
                     {index < cardData.definitions.length - 1 && ", "}

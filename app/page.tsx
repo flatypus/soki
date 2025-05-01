@@ -55,7 +55,7 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-24">
+    <main className="flex min-h-screen flex-col items-center justify-center p-4 md:px-24 md:py-8">
       {!token ? (
         showLogin ? (
           <LoginForm
@@ -84,4 +84,3 @@ export default function Home() {
     </main>
   );
 }
-
