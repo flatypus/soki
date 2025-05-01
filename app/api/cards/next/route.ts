@@ -11,7 +11,7 @@ import {
   UserKanjiProgress,
   UserPhraseProgress,
 } from "@/drizzle/schema";
-import { sql, eq, and, lte, asc, notInArray } from "drizzle-orm";
+import { sql, eq, and, lte, asc, notInArray, desc } from "drizzle-orm";
 
 // Constants for learning logic
 // const NEW_KANJI_PER_SESSION = 5; // Keep for potential future use, commented out for now
@@ -97,6 +97,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    console.log("No due reviews found");
+
     // --- 2. Check for New Kanji ---
     const learnedKanjiIdsSubquery = db
       .select({ id: userKanjiProgress.kanjiId })
@@ -114,20 +116,13 @@ export async function GET(request: NextRequest) {
       limit: 1, // Get the next single kanji based on order
     });
 
-    if (newKanji.length > 0) {
-      return NextResponse.json({
-        card: { type: "kanji", ...newKanji[0] },
-        status: "new",
-      });
-    }
-
     // --- 3. Check for New Phrases ---
     const learnedPhraseIdsSubquery = db
       .select({ id: userPhraseProgress.phraseId })
       .from(userPhraseProgress)
       .where(eq(userPhraseProgress.userId, userId));
 
-    // Find phrases where the user hasn't learned them yet
+    // Find phrases where the user hasn't learned them yet; this is bad
     const candidatePhrases = await db
       .select({
         phraseId: phrases.id,
@@ -136,9 +131,13 @@ export async function GET(request: NextRequest) {
         jlptLevel: phrases.jlptLevel,
         readings: phrases.readings,
         definitions: phrases.definitions,
-        // Aggregate constituent kanji progress
-        requiredKanjiCount: sql<number>`count(${phraseComponents.kanjiId})`,
-        learnedKanjiCount: sql<number>`count(case when ${userKanjiProgress.skill}::numeric >= ${MIN_KANJI_SKILL_FOR_PHRASE} then 1 else null end)`,
+        totalKanji: sql<number>`count(${phraseComponents.kanjiId})`,
+        unmetKanjiCount: sql<number>`count(CASE 
+          WHEN ${userKanjiProgress.skill} IS NULL 
+          OR ${userKanjiProgress.skill}::numeric < ${MIN_KANJI_SKILL_FOR_PHRASE} 
+          THEN 1 
+          ELSE NULL 
+        END)`,
       })
       .from(phrases)
       .leftJoin(phraseComponents, eq(phrases.id, phraseComponents.phraseId))
@@ -151,10 +150,18 @@ export async function GET(request: NextRequest) {
       )
       .where(notInArray(phrases.id, learnedPhraseIdsSubquery))
       .groupBy(phrases.id)
-      .orderBy(asc(phrases.jlptLevel), asc(phrases.id)) // Order by JLPT level, then ID
-      .having(
-        sql`count(${phraseComponents.kanjiId}) = count(case when ${userKanjiProgress.skill}::numeric >= ${MIN_KANJI_SKILL_FOR_PHRASE} then 1 else null end)`,
-      ); // All constituent kanji meet skill requirement
+      .orderBy(desc(phrases.jlptLevel), asc(phrases.id)).having(sql`count(CASE 
+        WHEN ${userKanjiProgress.skill} IS NULL 
+        OR ${userKanjiProgress.skill}::numeric < ${MIN_KANJI_SKILL_FOR_PHRASE} 
+        THEN 1 
+        ELSE NULL 
+      END) = 0`); // Only select phrases where ALL kanji meet the requirement
+
+    const options = [];
+
+    if (newKanji.length > 0) {
+      options.push({ type: "kanji", ...newKanji[0] });
+    }
 
     if (candidatePhrases.length > 0) {
       // The query already filters for phrases where all constituent kanji meet the skill requirement
@@ -168,8 +175,14 @@ export async function GET(request: NextRequest) {
         readings: nextPhrase.readings,
         definitions: nextPhrase.definitions,
       };
+      options.push({ type: "phrase", ...phraseCardData });
+    }
+
+    if (options.length > 0) {
+      // Randomly select between available new cards
+      const selectedCard = options[Math.floor(Math.random() * options.length)];
       return NextResponse.json({
-        card: { type: "phrase", ...phraseCardData },
+        card: selectedCard,
         status: "new",
       });
     }
@@ -190,4 +203,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-
