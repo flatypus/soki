@@ -6,10 +6,10 @@ import {
   kanji,
   phrases,
 } from "@/drizzle/schema";
-import { sql, eq, and, count, avg, desc } from "drizzle-orm";
+import { sql, eq, count, avg, desc } from "drizzle-orm";
 
-// Define skill level thresholds (adjust as needed)
-const LEARNED_SKILL_THRESHOLD = 0.8; // Consider an item learned if skill >= 0.8
+// Define skill level thresholds
+const LEARNED_SKILL_THRESHOLD = 0.6; // Consider an item learned if skill >= 0.6
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,7 +28,6 @@ export async function GET(request: NextRequest) {
       })
       .from(kanji);
 
-    // Using raw SQL for comparison with numeric string column
     const userKanjiStats = await db
       .select({
         learnedCount: count(
@@ -47,7 +46,6 @@ export async function GET(request: NextRequest) {
       })
       .from(phrases);
 
-    // Using raw SQL for comparison with numeric string column
     const userPhraseStats = await db
       .select({
         learnedCount: count(
@@ -59,21 +57,46 @@ export async function GET(request: NextRequest) {
       .from(userPhraseProgress)
       .where(eq(userPhraseProgress.userId, userId));
 
-    // --- Fetch detailed learned items (optional, could be separate endpoint if large) ---
-    const learnedKanjiDetails = await db.query.userKanjiProgress.findMany({
-      where: and(
-        eq(userKanjiProgress.userId, userId),
-        sql`${userKanjiProgress.skill}::numeric >= ${LEARNED_SKILL_THRESHOLD}`,
-      ),
-      // Fix: Fetch the full related kanji object instead of specific columns
+    // --- Fetch ALL reviewed items for the grid display ---
+    const allReviewedKanji = await db.query.userKanjiProgress.findMany({
+      where: eq(userKanjiProgress.userId, userId),
       with: {
-        kanji: true,
+        kanji: {
+          columns: { // Select only necessary columns for the grid
+            id: true,
+            character: true,
+            grade: true,
+            jlptLevel: true,
+          },
+        },
       },
-      orderBy: [
-        desc(userKanjiProgress.skill),
-        desc(userKanjiProgress.lastReviewed),
-      ],
-      limit: 100, // Limit for performance, add pagination if needed
+      columns: { // Select only necessary columns from progress
+        kanjiId: true,
+        skill: true,
+        lastReviewed: true,
+      },
+      orderBy: [desc(userKanjiProgress.lastReviewed)], // Order by last reviewed
+      // Potentially add limit/pagination if the number of reviewed items can be very large
+    });
+
+    const allReviewedPhrases = await db.query.userPhraseProgress.findMany({
+        where: eq(userPhraseProgress.userId, userId),
+        with: {
+            phrase: {
+                columns: { // Select only necessary columns for the grid
+                    id: true,
+                    phrase: true,
+                    jlptLevel: true,
+                }
+            }
+        },
+        columns: { // Select only necessary columns from progress
+            phraseId: true,
+            skill: true,
+            lastReviewed: true,
+        },
+        orderBy: [desc(userPhraseProgress.lastReviewed)],
+        // Potentially add limit/pagination
     });
 
     const summary = {
@@ -84,6 +107,15 @@ export async function GET(request: NextRequest) {
           userKanjiStats[0]?.averageSkill ?? "0",
         ).toFixed(2),
         totalReviewed: userKanjiStats[0]?.totalReviewed ?? 0,
+        // Add all reviewed kanji data for the grid
+        reviewedItems: allReviewedKanji
+          .filter((item) => item.kanji !== null && item.kanji !== undefined)
+          .map((item) => ({
+            id: item.kanji!.id,
+            character: item.kanji!.character,
+            skill: item.skill,
+            // Add other minimal data needed for grid display if necessary
+          })),
       },
       phrases: {
         total: phraseStats[0]?.totalCount ?? 0,
@@ -92,21 +124,16 @@ export async function GET(request: NextRequest) {
           userPhraseStats[0]?.averageSkill ?? "0",
         ).toFixed(2),
         totalReviewed: userPhraseStats[0]?.totalReviewed ?? 0,
+        // Add all reviewed phrase data for the grid
+        reviewedItems: allReviewedPhrases
+          .filter((item) => item.phrase !== null && item.phrase !== undefined)
+          .map((item) => ({
+              id: item.phrase!.id,
+              phrase: item.phrase!.phrase,
+              skill: item.skill,
+              // Add other minimal data needed for grid display if necessary
+          })),
       },
-      // Map the results, ensuring kanji is not null/undefined
-      recentlyLearnedKanji: learnedKanjiDetails
-        .filter((item) => item.kanji !== null && item.kanji !== undefined)
-        .map((item) => {
-          const kanjiData = item.kanji!; // Non-null assertion should be safe after filter
-          return {
-            id: kanjiData.id,
-            character: kanjiData.character,
-            definitions: kanjiData.definitions,
-            grade: kanjiData.grade,
-            jlptLevel: kanjiData.jlptLevel,
-            skill: item.skill,
-          };
-        }),
     };
 
     return NextResponse.json(summary, { status: 200 });
@@ -120,3 +147,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+

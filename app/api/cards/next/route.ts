@@ -16,7 +16,7 @@ import { sql, eq, and, lte, asc, notInArray } from "drizzle-orm";
 // Constants for learning logic
 // const NEW_KANJI_PER_SESSION = 5; // Keep for potential future use, commented out for now
 // const NEW_PHRASES_PER_SESSION = 3; // Keep for potential future use, commented out for now
-const MIN_KANJI_SKILL_FOR_PHRASE = 0.6; // Minimum skill level for constituent kanji before showing phrase
+const MIN_KANJI_SKILL_FOR_PHRASE = 0.2; // Lowered threshold: Minimum skill level for constituent kanji before showing phrase
 
 // Define a more specific type for the review card
 type ReviewCard =
@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
         definitions: phrases.definitions,
         // Aggregate constituent kanji progress
         requiredKanjiCount: sql<number>`count(${phraseComponents.kanjiId})`,
-        learnedKanjiCount: sql<number>`count(case when ${userKanjiProgress.skill} >= ${MIN_KANJI_SKILL_FOR_PHRASE} then 1 else null end)`,
+        learnedKanjiCount: sql<number>`count(case when ${userKanjiProgress.skill}::numeric >= ${MIN_KANJI_SKILL_FOR_PHRASE} then 1 else null end)`,
       })
       .from(phrases)
       .leftJoin(phraseComponents, eq(phrases.id, phraseComponents.phraseId))
@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
       .groupBy(phrases.id)
       .orderBy(asc(phrases.jlptLevel), asc(phrases.id)) // Order by JLPT level, then ID
       .having(
-        sql`count(${phraseComponents.kanjiId}) = count(case when ${userKanjiProgress.skill} >= ${MIN_KANJI_SKILL_FOR_PHRASE} then 1 else null end)`,
+        sql`count(${phraseComponents.kanjiId}) = count(case when ${userKanjiProgress.skill}::numeric >= ${MIN_KANJI_SKILL_FOR_PHRASE} then 1 else null end)`,
       ); // All constituent kanji meet skill requirement
 
     if (candidatePhrases.length > 0) {
@@ -190,3 +190,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+

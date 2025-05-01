@@ -10,6 +10,12 @@ const INITIAL_EASE_FACTOR = 2.5;
 const INITIAL_INTERVAL_NEW = 1; // days for first review after seeing new card
 const INITIAL_INTERVAL_LEARNED = 1; // days for first review after getting it right
 
+// Skill gain constants (Adjusted)
+const BASE_SKILL_GAIN_CORRECT = 0.15; // Increased base gain for correct answers
+const SKILL_BONUS_PER_QUALITY_POINT = 0.10; // Increased bonus per quality point above 3
+const SKILL_PENALTY_PER_QUALITY_POINT = 0.08; // Adjusted penalty
+const EASY_RATING_SKILL_BOOST = 0.25; // Additional boost specifically for 'Easy' (quality 4)
+
 interface ReviewRequestBody {
   cardId: number;
   cardType: "kanji" | "phrase";
@@ -55,12 +61,21 @@ function calculateNextReview(
     if (newEaseFactor < MIN_EASE_FACTOR) {
       newEaseFactor = MIN_EASE_FACTOR;
     }
-    newSkill = Math.min(1.0, progress.skill + 0.1 + (quality - 3) * 0.05);
+    // Calculate skill gain
+    let skillGain = BASE_SKILL_GAIN_CORRECT + (quality - 3) * SKILL_BONUS_PER_QUALITY_POINT;
+    // Add specific boost for 'Easy' rating
+    if (quality === 4) {
+        skillGain += EASY_RATING_SKILL_BOOST;
+    }
+    newSkill = Math.min(1.0, progress.skill + skillGain);
+
   } else {
     // Incorrect response
     newIntervalDays = INITIAL_INTERVAL_LEARNED; // Reset interval
     newEaseFactor = Math.max(MIN_EASE_FACTOR, progress.easeFactor - 0.2); // Decrease ease factor
-    newSkill = Math.max(0.0, progress.skill - 0.1 - (2 - quality) * 0.05);
+    // Calculate skill penalty
+    const skillPenalty = 0.1 + (2 - quality) * SKILL_PENALTY_PER_QUALITY_POINT;
+    newSkill = Math.max(0.0, progress.skill - skillPenalty);
   }
 
   const nextReviewDate = new Date(now);
@@ -73,7 +88,7 @@ function calculateNextReview(
     easeFactor: newEaseFactor,
     reviewCount: progress.reviewCount + 1,
     lastReviewed: now,
-    skill: parseFloat(newSkill.toFixed(2)),
+    skill: parseFloat(newSkill.toFixed(2)), // Ensure skill is rounded
   };
 }
 
@@ -100,6 +115,10 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+    // Adjust quality mapping if frontend sends 1-4
+    // Assuming frontend sends 1-4, map to 0-5 internally (e.g., 1->0, 2->2, 3->3, 4->4)
+    // Or adjust the quality checks (>=3) and calculations accordingly.
+    // For now, assuming quality is 0-5 as per original comment.
     if (quality < 0 || quality > 5) {
       return NextResponse.json(
         { error: "Invalid quality value (must be 0-5)" },
@@ -200,16 +219,23 @@ export async function POST(request: NextRequest) {
         lastReviewed: null,
       };
 
-      const firstReviewQuality = quality >= 3 ? 3 : 0;
-      nextProgress = calculateNextReview(progressInput, firstReviewQuality);
-
+      // Calculate initial skill based on first review quality
+      let initialSkill = 0.0;
       if (quality >= 3) {
-        nextProgress.skill = parseFloat(
-          (0.1 + (quality - 3) * 0.05).toFixed(2),
-        );
-      } else {
-        nextProgress.skill = 0.0;
+          let skillGain = BASE_SKILL_GAIN_CORRECT + (quality - 3) * SKILL_BONUS_PER_QUALITY_POINT;
+          if (quality === 4) {
+              skillGain += EASY_RATING_SKILL_BOOST;
+          }
+          initialSkill = Math.min(1.0, skillGain);
       }
+
+      // Use calculateNextReview to get interval, ease factor etc. based on first quality
+      // Pass a temporary quality for interval calculation (e.g., 3 if correct, 0 if incorrect)
+      const tempQualityForInterval = quality >= 3 ? 3 : 0;
+      nextProgress = calculateNextReview(progressInput, tempQualityForInterval);
+
+      // Override skill and review count for the first review
+      nextProgress.skill = parseFloat(initialSkill.toFixed(2));
       nextProgress.reviewCount = 1;
       nextProgress.lastReviewed = new Date();
 
@@ -251,3 +277,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
