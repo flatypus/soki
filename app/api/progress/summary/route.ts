@@ -11,6 +11,29 @@ import { sql, eq, count, avg, desc, asc } from "drizzle-orm";
 // Define skill level thresholds
 const LEARNED_SKILL_THRESHOLD = 0.6; // Consider an item learned if skill >= 0.6
 
+// Define types for normalized data
+interface NormalizedKanjiItem {
+  userId?: string; // Made optional
+  kanjiId: number;
+  nextReview?: Date; // Made optional
+  intervalDays?: number; // Made optional
+  easeFactor?: string; // Made optional
+  reviewCount: number;
+  lastReviewed: Date | null;
+  skill: string;
+  kanji: {
+    id: number;
+    character: string;
+    definitions: string[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    readings: any[]; // Use specific type if available, e.g., ReadingType[]
+    grade: number | null;
+    jlptLevel: number | null;
+    strokeCount: number | null;
+    frequency: number | null;
+  } | null; // Kanji can be null from left join
+}
+
 export async function GET(request: NextRequest) {
   try {
     const userId = request.headers.get("X-User-Id");
@@ -127,24 +150,36 @@ export async function GET(request: NextRequest) {
 
 
     // --- Fetch ALL reviewed items for the grid display ---
-    let rawReviewedKanji;
+    let allReviewedKanji: NormalizedKanjiItem[] = []; // Initialize with proper type
+
     if (kanjiSortBy === "frequency_asc" || kanjiSortBy === "frequency_desc") {
       // Use explicit join for frequency sorting
-      rawReviewedKanji = await db
+      const rawReviewedKanji = await db
         .select() // Select all columns from both tables
         .from(userKanjiProgress)
         .leftJoin(kanji, eq(userKanjiProgress.kanjiId, kanji.id))
         .where(eq(userKanjiProgress.userId, userId))
-        .orderBy(kanjiOrderBy) // Apply dynamic sorting (now works for frequency)
+        .orderBy(...kanjiOrderBy) // Apply dynamic sorting
         .limit(pageSize)
         .offset(offsetKanji);
+
+      // Normalize the structure from the join
+      allReviewedKanji = rawReviewedKanji
+        .map((item) => {
+          if (!item || !item.user_kanji_progress || !item.kanji) return null;
+          return {
+            ...item.user_kanji_progress, // Spread progress fields (use snake_case)
+            kanji: item.kanji, // Keep kanji details nested
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null); // Type guard
     } else {
       // Use findMany with 'with' for other sorting options
-      rawReviewedKanji = await db.query.userKanjiProgress.findMany({
+      const rawReviewedKanji = await db.query.userKanjiProgress.findMany({
         where: eq(userKanjiProgress.userId, userId),
         with: {
           kanji: {
-            columns: { // Select ALL necessary columns for the dialog
+            columns: {
               id: true,
               character: true,
               definitions: true,
@@ -156,37 +191,36 @@ export async function GET(request: NextRequest) {
             },
           },
         },
-        columns: { // Select necessary columns from progress
+        columns: {
           kanjiId: true,
           skill: true,
           lastReviewed: true,
-          reviewCount: true, // Added reviewCount
+          reviewCount: true,
         },
         orderBy: kanjiOrderBy, // Apply dynamic sorting
         limit: pageSize,
         offset: offsetKanji,
       });
+      // Data structure is already correct here
+      allReviewedKanji = rawReviewedKanji;
     }
 
-    // Normalize the structure before mapping
-    const allReviewedKanji = rawReviewedKanji.map(item => {
-        // Handle potential null kanji from leftJoin if a progress record exists without a matching kanji (shouldn't happen with foreign keys)
-        if (!item) return null; 
-
-        if (kanjiSortBy === "frequency_asc" || kanjiSortBy === "frequency_desc") {
-            // Structure from db.select() is { userKanjiProgress: {...}, kanji: {...} }
-            // Need to transform it to match findMany's structure { ..., kanji: {...} }
-            // Ensure userKanjiProgress and kanji are not null before spreading/accessing
-            if (!item.userKanjiProgress || !item.kanji) return null;
-            return {
-                ...item.userKanjiProgress, // Spread progress fields
-                kanji: item.kanji // Keep kanji details nested
-            };
-        } else {
-            // Structure from findMany is already correct
-            return item;
-        }
-    }).filter(item => item !== null); // Filter out any null items from normalization step
+    // Map to final structure for the summary (moved outside the conditional blocks)
+    const reviewedKanjiItems = allReviewedKanji
+      .filter((item) => item.kanji !== null && item.kanji !== undefined)
+      .map((item) => ({
+        id: item.kanji!.id,
+        character: item.kanji!.character,
+        skill: item.skill,
+        definitions: item.kanji!.definitions,
+        readings: item.kanji!.readings,
+        grade: item.kanji!.grade,
+        jlptLevel: item.kanji!.jlptLevel,
+        strokeCount: item.kanji!.strokeCount,
+        frequency: item.kanji!.frequency,
+        lastReviewed: item.lastReviewed,
+        reviewCount: item.reviewCount,
+      }));
 
     const allReviewedPhrases = await db.query.userPhraseProgress.findMany({
         where: eq(userPhraseProgress.userId, userId),
@@ -222,23 +256,8 @@ export async function GET(request: NextRequest) {
         totalReviewed: totalReviewedKanjiCount, // Use calculated total
         currentPage: pageKanji,
         totalPages: totalPagesKanji,
-        // Add paginated reviewed kanji data for the grid
-        reviewedItems: allReviewedKanji
-          .filter((item) => item.kanji !== null && item.kanji !== undefined)
-          .map((item) => ({
-            id: item.kanji!.id,
-            character: item.kanji!.character,
-            skill: item.skill,
-            // Add ALL details for the dialog
-            definitions: item.kanji!.definitions,
-            readings: item.kanji!.readings,
-            grade: item.kanji!.grade,
-            jlptLevel: item.kanji!.jlptLevel,
-            strokeCount: item.kanji!.strokeCount,
-            frequency: item.kanji!.frequency,
-            lastReviewed: item.lastReviewed,
-            reviewCount: item.reviewCount, // Assuming reviewCount is available in userKanjiProgress
-          })),
+        // Use the pre-mapped reviewedKanjiItems variable
+        reviewedItems: reviewedKanjiItems,
       },
       phrases: {
         total: phraseStats[0]?.totalCount ?? 0,

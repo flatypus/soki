@@ -32,6 +32,28 @@ const flairStyle = `
     pointer-events: none; /* Prevent interaction */
     z-index: 10;
   }
+
+  /* Added CSS for Unlock Animation */
+  @keyframes unlock-pop {
+    0% { opacity: 0; transform: translateY(20px) scale(0.8); }
+    50% { opacity: 1; transform: translateY(0) scale(1.1); }
+    100% { opacity: 0; transform: translateY(-20px) scale(0.9); }
+  }
+  .unlock-animation {
+    position: absolute;
+    top: 40%; /* Position centrally */
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: #38bdf8; /* Light blue color */
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 8px 16px;
+    border-radius: 8px;
+    animation: unlock-pop 1s ease-in-out forwards;
+    pointer-events: none; /* Prevent interaction */
+    z-index: 20; /* Ensure it's above other elements */
+  }
 `;
 
 interface FlashcardProps {
@@ -79,6 +101,7 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
   const [flair, setFlair] = useState<{ id: number; quality: number } | null>(
     null,
   );
+  const [showUnlockAnimation, setShowUnlockAnimation] = useState<boolean>(false); // State for unlock animation
   const { toast } = useToast();
   const flipSoundRef = useRef<HTMLAudioElement | null>(null);
   const dingSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -238,6 +261,26 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
             errorData.error || `HTTP error! status: ${response.status}`,
           );
         }
+        // Get response data to check for unlocked phrases
+        const responseData = await response.json();
+
+        // Trigger notifications for unlocked phrases
+        if (responseData.unlockedPhrases && responseData.unlockedPhrases.length > 0) {
+          // Play unlock sound (using ding for now, replace if a specific sound is added)
+          playSound(dingSoundRef);
+          // Trigger animation
+          setShowUnlockAnimation(true);
+          setTimeout(() => setShowUnlockAnimation(false), 1000); // Duration of animation
+
+          responseData.unlockedPhrases.forEach((phrase: { id: number; phrase: string }) => {
+            toast({
+              title: "Phrase Unlocked!",
+              description: `You can now learn: ${phrase.phrase}`,
+              // Consider adding a specific style or duration
+            });
+          });
+        }
+
         onReviewComplete?.();
         // Fetch the next card (will use preloaded if available)
         fetchOrUsePreloadedCard();
@@ -326,7 +369,14 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
 
     return (
       // Removed h-full from Card, let content dictate height
-      <Card className="w-full flex flex-col h-full">
+      <Card className="w-full flex flex-col h-full relative"> {/* Added relative positioning */}
+        {/* Unlock Animation Overlay */}
+        {showUnlockAnimation && (
+          <div key={Date.now()} className="unlock-animation">
+            Phrase Unlocked!
+          </div>
+        )}
+
         <CardHeader className="pt-8 pb-2">
           <CardTitle className="text-6xl text-center mb-2">
             {cardData.type === "kanji" ? cardData.character : cardData.phrase}

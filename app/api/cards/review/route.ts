@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 // Fix: Remove unused UserKanjiProgress, UserPhraseProgress imports
-import { userKanjiProgress, userPhraseProgress } from "@/drizzle/schema";
-import { eq, and } from "drizzle-orm";
+// Import necessary schema and functions
+import {
+  userKanjiProgress,
+  userPhraseProgress,
+  phraseComponents,
+  phrases, // Import phrases table for fetching unlocked phrase details
+  // Kanji, // Keep for type hints if needed elsewhere - Removed as unused
+  // Phrase, // Keep for type hints if needed elsewhere - Removed as unused
+} from "@/drizzle/schema";
+import { eq, and, inArray } from "drizzle-orm";
 
 // Simplified SM-2 like algorithm constants
 const MIN_EASE_FACTOR = 1.3;
 const INITIAL_EASE_FACTOR = 2.5;
 const INITIAL_INTERVAL_NEW = 1; // days for first review after seeing new card
 const INITIAL_INTERVAL_LEARNED = 1; // days for first review after getting it right
+const MIN_KANJI_SKILL_FOR_PHRASE = 0.3; // Threshold for unlocking phrases
 
 // Skill gain constants (Adjusted)
 const BASE_SKILL_GAIN_CORRECT = 0.15; // Increased base gain for correct answers
@@ -89,7 +98,117 @@ function calculateNextReview(
     reviewCount: progress.reviewCount + 1,
     lastReviewed: now,
     skill: parseFloat(newSkill.toFixed(2)), // Ensure skill is rounded
-  };
+  }
+}
+
+// Helper function to check and unlock phrases
+async function checkAndUnlockPhrases(
+  userId: string,
+  reviewedKanjiId: number,
+  newKanjiSkill: number,
+): Promise<Array<{ id: number; phrase: string }>> {
+  if (newKanjiSkill < MIN_KANJI_SKILL_FOR_PHRASE) {
+    return []; // Kanji skill not high enough to unlock anything
+  }
+
+  // 1. Find phrases containing the reviewed kanji
+  const relatedPhrases = await db
+    .selectDistinct({ phraseId: phraseComponents.phraseId })
+    .from(phraseComponents)
+    .where(eq(phraseComponents.kanjiId, reviewedKanjiId));
+
+  if (relatedPhrases.length === 0) {
+    return [];
+  }
+
+  // const relatedPhraseIds = relatedPhrases.map((p) => p.phraseId); // Removed as unused
+  const newlyUnlockedPhrases: Array<{ id: number; phrase: string }> = [];
+
+  // 2. For each related phrase, check if ALL its components meet the skill threshold
+  for (const phraseInfo of relatedPhrases) {
+    const phraseId = phraseInfo.phraseId;
+
+    // Check if user already has progress for this phrase
+    const existingProgress = await db.query.userPhraseProgress.findFirst({
+      where: and(
+        eq(userPhraseProgress.userId, userId),
+        eq(userPhraseProgress.phraseId, phraseId),
+      ),
+      columns: { phraseId: true }, // Only need to check existence
+    });
+
+    if (existingProgress) {
+      continue; // Already learned or unlocked
+    }
+
+    // Get all components for this phrase
+    const components = await db
+      .select({ kanjiId: phraseComponents.kanjiId })
+      .from(phraseComponents)
+      .where(eq(phraseComponents.phraseId, phraseId));
+
+    const componentKanjiIds = components.map((c) => c.kanjiId);
+
+    // Get user's progress for all components
+    const componentProgress = await db
+      .select({
+        kanjiId: userKanjiProgress.kanjiId,
+        skill: userKanjiProgress.skill,
+      })
+      .from(userKanjiProgress)
+      .where(
+        and(
+          eq(userKanjiProgress.userId, userId),
+          inArray(userKanjiProgress.kanjiId, componentKanjiIds),
+        ),
+      );
+
+    // Check if all components are learned sufficiently
+    let allComponentsLearned = true;
+    if (componentProgress.length < componentKanjiIds.length) {
+      allComponentsLearned = false; // User hasn't learned all component kanji yet
+    } else {
+      for (const progress of componentProgress) {
+        if (parseFloat(progress.skill ?? "0.0") < MIN_KANJI_SKILL_FOR_PHRASE) {
+          allComponentsLearned = false;
+          break;
+        }
+      }
+    }
+
+    // 3. If all components meet threshold and phrase not started, unlock it
+    if (allComponentsLearned) {
+      const now = new Date();
+      try {
+        await db.insert(userPhraseProgress).values({
+          userId: userId,
+          phraseId: phraseId,
+          skill: "0.0",
+          reviewCount: 0,
+          intervalDays: 0, // Start with 0 interval, ready for first review
+          easeFactor: INITIAL_EASE_FACTOR.toString(),
+          nextReview: now, // Make it available immediately
+          lastReviewed: null,
+        });
+
+        // Fetch phrase text to return
+        const phraseData = await db.query.phrases.findFirst({
+            where: eq(phrases.id, phraseId),
+            columns: { phrase: true }
+        });
+
+        if (phraseData) {
+            newlyUnlockedPhrases.push({ id: phraseId, phrase: phraseData.phrase });
+        }
+
+      } catch (insertError) {
+        // Handle potential unique constraint violation if unlock happens concurrently (unlikely but possible)
+        console.warn(`Failed to insert unlock record for phrase ${phraseId}, user ${userId}. Might already exist.`, insertError);
+      }
+    }
+  }
+
+  return newlyUnlockedPhrases;
 }
 
 export async function POST(request: NextRequest) {
@@ -128,6 +247,7 @@ export async function POST(request: NextRequest) {
 
     let currentProgress: ProgressRecordKanji | ProgressRecordPhrase | undefined;
     let nextProgress: CalculationProgressRecord;
+    let unlockedPhrases: Array<{ id: number; phrase: string }> = []; // Initialize unlockedPhrases
 
     if (cardType === "kanji") {
       currentProgress = await db.query.userKanjiProgress.findFirst({
@@ -188,6 +308,11 @@ export async function POST(request: NextRequest) {
               eq(userKanjiProgress.kanjiId, cardId),
             ),
           );
+
+        // --- Check for newly unlocked phrases ---
+        unlockedPhrases = await checkAndUnlockPhrases(userId, cardId, nextProgress.skill);
+        // ----------------------------------------
+
       } else {
         await db
           .update(userPhraseProgress)
@@ -264,6 +389,7 @@ export async function POST(request: NextRequest) {
       {
         message: "Progress updated successfully",
         nextReview: nextProgress.nextReview,
+        unlockedPhrases: unlockedPhrases, // Include unlocked phrases in the response
       },
       { status: 200 },
     );
@@ -277,4 +403,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

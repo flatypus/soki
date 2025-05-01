@@ -99,6 +99,33 @@ export async function GET(request: NextRequest) {
 
     console.log("No due reviews found");
 
+    // --- 1.5 Check for Unlocked Phrases (reviewCount = 0) ---
+    const unlockedPhrase = await db.query.userPhraseProgress.findFirst({
+      where: and(
+        eq(userPhraseProgress.userId, userId),
+        eq(userPhraseProgress.reviewCount, 0)
+      ),
+      orderBy: [asc(userPhraseProgress.nextReview)], // Prioritize oldest unlocked
+      with: {
+        phrase: true,
+      },
+    });
+
+    if (unlockedPhrase) {
+        console.log("Found unlocked phrase:", unlockedPhrase.phrase.phrase);
+        // Format similar to review card but with status "new"
+        const cardData = {
+            ...unlockedPhrase.phrase,
+            // No progress data needed for a new card presentation
+        };
+        return NextResponse.json({
+            card: { type: "phrase", ...cardData },
+            status: "new",
+        });
+    }
+
+    console.log("No unlocked phrases found");
+
     // --- 2. Check for New Kanji ---
     const learnedKanjiIdsSubquery = db
       .select({ id: userKanjiProgress.kanjiId })
