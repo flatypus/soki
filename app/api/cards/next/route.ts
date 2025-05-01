@@ -2,21 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
   kanji,
-  phrases,
+  // phrases, // Removed as unused
   userKanjiProgress,
   userPhraseProgress,
-  phraseComponents,
+  // phraseComponents, // Removed as unused
   Kanji,
   Phrase,
   UserKanjiProgress,
   UserPhraseProgress,
 } from "@/drizzle/schema";
-import { sql, eq, and, lte, asc, notInArray, desc } from "drizzle-orm";
+import { eq, and, lte, asc, notInArray } from "drizzle-orm";
 
 // Constants for learning logic
 // const NEW_KANJI_PER_SESSION = 5; // Keep for potential future use, commented out for now
 // const NEW_PHRASES_PER_SESSION = 3; // Keep for potential future use, commented out for now
-const MIN_KANJI_SKILL_FOR_PHRASE = 0.3; // User requested threshold: Minimum skill level for constituent kanji before showing phrase
+// const MIN_KANJI_SKILL_FOR_PHRASE = 0.3; // Removed as unused in this route
 
 // Define a more specific type for the review card
 type ReviewCard =
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
 
     console.log("No unlocked phrases found");
 
-    // --- 2. Check for New Kanji ---
+    // --- 3. Check for New Kanji ---
     const learnedKanjiIdsSubquery = db
       .select({ id: userKanjiProgress.kanjiId })
       .from(userKanjiProgress)
@@ -143,76 +143,16 @@ export async function GET(request: NextRequest) {
       limit: 1, // Get the next single kanji based on order
     });
 
-    // --- 3. Check for New Phrases ---
-    const learnedPhraseIdsSubquery = db
-      .select({ id: userPhraseProgress.phraseId })
-      .from(userPhraseProgress)
-      .where(eq(userPhraseProgress.userId, userId));
-
-    // Find phrases where the user hasn't learned them yet; this is bad
-    const candidatePhrases = await db
-      .select({
-        phraseId: phrases.id,
-        phrase: phrases.phrase,
-        isCommon: phrases.isCommon,
-        jlptLevel: phrases.jlptLevel,
-        readings: phrases.readings,
-        definitions: phrases.definitions,
-        totalKanji: sql<number>`count(${phraseComponents.kanjiId})`,
-        unmetKanjiCount: sql<number>`count(CASE 
-          WHEN ${userKanjiProgress.skill} IS NULL 
-          OR ${userKanjiProgress.skill}::numeric < ${MIN_KANJI_SKILL_FOR_PHRASE} 
-          THEN 1 
-          ELSE NULL 
-        END)`,
-      })
-      .from(phrases)
-      .leftJoin(phraseComponents, eq(phrases.id, phraseComponents.phraseId))
-      .leftJoin(
-        userKanjiProgress,
-        and(
-          eq(phraseComponents.kanjiId, userKanjiProgress.kanjiId),
-          eq(userKanjiProgress.userId, userId),
-        ),
-      )
-      .where(notInArray(phrases.id, learnedPhraseIdsSubquery))
-      .groupBy(phrases.id)
-      .orderBy(desc(phrases.jlptLevel), asc(phrases.id)).having(sql`count(CASE 
-        WHEN ${userKanjiProgress.skill} IS NULL 
-        OR ${userKanjiProgress.skill}::numeric < ${MIN_KANJI_SKILL_FOR_PHRASE} 
-        THEN 1 
-        ELSE NULL 
-      END) = 0`); // Only select phrases where ALL kanji meet the requirement
-
-    const options = [];
-
+    // If a new Kanji is found, return it
     if (newKanji.length > 0) {
-      options.push({ type: "kanji", ...newKanji[0] });
-    }
-
-    if (candidatePhrases.length > 0) {
-      // The query already filters for phrases where all constituent kanji meet the skill requirement
-      const nextPhrase = candidatePhrases[0];
-      // Ensure the structure matches what the frontend expects (similar to KanjiCardData/PhraseCardData)
-      const phraseCardData = {
-        id: nextPhrase.phraseId,
-        phrase: nextPhrase.phrase,
-        isCommon: nextPhrase.isCommon,
-        jlptLevel: nextPhrase.jlptLevel,
-        readings: nextPhrase.readings,
-        definitions: nextPhrase.definitions,
-      };
-      options.push({ type: "phrase", ...phraseCardData });
-    }
-
-    if (options.length > 0) {
-      // Randomly select between available new cards
-      const selectedCard = options[Math.floor(Math.random() * options.length)];
+      console.log("Found new kanji:", newKanji[0].character);
       return NextResponse.json({
-        card: selectedCard,
+        card: { type: "kanji", ...newKanji[0] },
         status: "new",
       });
     }
+
+    console.log("No new kanji found");
 
     // --- 4. No cards available ---
     return NextResponse.json(
