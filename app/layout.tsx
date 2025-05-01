@@ -9,10 +9,12 @@ const inter = Inter({ subsets: ["latin"] });
 // Define metadata
 export const metadata: Metadata = {
   title: "Soki - Kanji & Phrase SRS",
-  description: "Learn Japanese Kanji and Phrases efficiently with this Spaced Repetition System (SRS) flashcard app.",
+  description:
+    "Learn Japanese Kanji and Phrases efficiently with this Spaced Repetition System (SRS) flashcard app.",
   openGraph: {
     title: "Soki - Kanji & Phrase SRS",
-    description: "Master Japanese Kanji and vocabulary with Soki, an intuitive SRS flashcard application.",
+    description:
+      "Master Japanese Kanji and vocabulary with Soki, an intuitive SRS flashcard application.",
     url: "https://soki.example.com", // Replace with actual deployment URL later
     siteName: "Soki SRS",
     // Add an image URL later if available
@@ -44,14 +46,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>{/* Removed extra space before closing bracket */}
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
           {children}
           <Toaster />
         </ThemeProvider>
@@ -59,4 +61,3 @@ export default function RootLayout({
     </html>
   );
 }
-

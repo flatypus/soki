@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-} from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -81,7 +76,9 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRevealed, setIsRevealed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [flair, setFlair] = useState<{ id: number; quality: number } | null>(null);
+  const [flair, setFlair] = useState<{ id: number; quality: number } | null>(
+    null,
+  );
   const { toast } = useToast();
   const flipSoundRef = useRef<HTMLAudioElement | null>(null);
   const dingSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -107,7 +104,9 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
   // Modified playSound to accept potentially null ref and check internally
   const playSound = (soundRef: React.RefObject<HTMLAudioElement | null>) => {
     if (soundRef.current) {
-      soundRef.current.play().catch(err => console.error("Error playing sound:", err));
+      soundRef.current
+        .play()
+        .catch((err) => console.error("Error playing sound:", err));
     }
   };
 
@@ -268,10 +267,10 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
     const handleKeyPress = (e: KeyboardEvent) => {
       // Allow space/reveal even if fetching next card, but not review keys
       if (e.code === "Space") {
-         if (isLoading && !currentCard) return; // Still block if initial load
-         e.preventDefault();
-         handleReveal();
-         return;
+        if (isLoading && !currentCard) return; // Still block if initial load
+        e.preventDefault();
+        handleReveal();
+        return;
       }
 
       if (isFetchingRef.current) return; // Block review keys if fetching
@@ -327,9 +326,9 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
 
     return (
       // Removed h-full from Card, let content dictate height
-      <Card className="w-full flex flex-col">
-        <CardHeader className="pt-4 pb-2"> {/* Reduced padding */} 
-          <CardTitle className="text-6xl text-center mb-2"> {/* Reduced margin */} 
+      <Card className="w-full flex flex-col h-full">
+        <CardHeader className="pt-8 pb-2">
+          <CardTitle className="text-6xl text-center mb-2">
             {cardData.type === "kanji" ? cardData.character : cardData.phrase}
           </CardTitle>
           <CardDescription className="text-center">
@@ -339,59 +338,58 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
             {cardData.type === "kanji" &&
               cardData.grade &&
               ` (Grade ${cardData.grade})`}
+            {cardData.type === "kanji" && (
+              <div className="text-xs text-muted-foreground mt-2">
+                {cardData.strokeCount && `Strokes: ${cardData.strokeCount}`}
+                {cardData.frequency !== 99999 &&
+                  cardData.frequency !== null &&
+                  ` | Frequency Rank: ${cardData.frequency}`}
+              </div>
+            )}
           </CardDescription>
         </CardHeader>
-        {/* Removed flex-grow, adjusted padding/spacing */}
-        <CardContent className="space-y-2 py-2"> 
+        <CardContent className="space-y-2 py-2 h-full grid place-items-center">
           {isBackFace ? (
-            <>
-              <div>
-                <h4 className="font-semibold mb-1">Readings:</h4>
-                <ul className="list-disc list-inside text-sm">
-                  {cardData.readings.map((r, index) => (
-                    <li key={index}>
-                      {r.reading}{" "}
-                      {r.word &&
-                      r.word !==
-                        (cardData.type === "kanji"
-                          ? cardData.character
-                          : cardData.phrase)
-                        ? `(${r.word})`
-                        : ""}
-                    </li>
-                  ))}
-                </ul>
+            <div className="max-w-[50%]">
+              <div className="flex flex-row gap-[2px] flex-wrap text-sm">
+                <span className="font-semibold">Readings:</span>
+                {cardData.readings.map((r, index) => (
+                  <span key={index} className="text-sm">
+                    {r.reading}
+                    {r.word &&
+                    r.word !==
+                      (cardData.type === "kanji"
+                        ? cardData.character
+                        : cardData.phrase)
+                      ? ` (${r.word})`
+                      : ""}
+                    {index < cardData.readings.length - 1 && ", "}
+                  </span>
+                ))}
               </div>
-              <div>
-                <h4 className="font-semibold mb-1">Definitions:</h4>
-                <ul className="list-disc list-inside text-sm">
-                  {cardData.definitions.slice(0, 5).map((def, index) => (
-                    <li key={index}>{def}</li>
-                  ))}
-                  {cardData.definitions.length > 5 && (
-                    <li className="text-muted-foreground">...and more</li>
-                  )}
-                </ul>
+              <div className="flex flex-wrap text-sm gap-[2px]">
+                <span className="font-semibold">Definitions:</span>
+                {cardData.definitions.slice(0, 5).map((def, index) => (
+                  <span key={index}>
+                    {def}
+                    {index < cardData.definitions.length - 1 && ", "}
+                  </span>
+                ))}
               </div>
-              {cardData.type === "kanji" && (
-                <div className="text-xs text-muted-foreground mt-2">
-                  {cardData.strokeCount && `Strokes: ${cardData.strokeCount}`}
-                  {cardData.frequency !== 99999 &&
-                    cardData.frequency !== null &&
-                    ` | Frequency Rank: ${cardData.frequency}`}
-                </div>
-              )}
-            </>
+            </div>
           ) : (
-            // Removed surrounding div, button is centered by CardContent's default behavior or text-center
-            <div className="text-center"> {/* Center button */} 
-              <Button onClick={handleReveal} disabled={isFetchingRef.current && !currentCard}>Reveal Answer</Button>
+            <div className="text-center">
+              <Button
+                onClick={handleReveal}
+                disabled={isFetchingRef.current && !currentCard}
+              >
+                Reveal Answer
+              </Button>
             </div>
           )}
         </CardContent>
-        {/* Reduced top margin */}
-        <CardFooter className="flex justify-around pt-2 pb-4 relative"> 
-          {isBackFace ? (
+        {isBackFace && (
+          <CardFooter className="flex justify-around pt-2 pb-4 relative">
             <>
               <Button
                 variant="destructive"
@@ -400,7 +398,11 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
                 className="relative"
               >
                 Again (1)
-                {flair?.quality === 1 && <span key={flair.id} className="flair-animation">-1</span>}
+                {flair?.quality === 1 && (
+                  <span key={flair.id} className="flair-animation">
+                    -1
+                  </span>
+                )}
               </Button>
               <Button
                 variant="outline"
@@ -409,7 +411,11 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
                 className="relative"
               >
                 Hard (2)
-                 {flair?.quality === 2 && <span key={flair.id} className="flair-animation">+0</span>}
+                {flair?.quality === 2 && (
+                  <span key={flair.id} className="flair-animation">
+                    +0
+                  </span>
+                )}
               </Button>
               <Button
                 variant="outline"
@@ -418,7 +424,11 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
                 className="relative"
               >
                 Good (3)
-                 {flair?.quality === 3 && <span key={flair.id} className="flair-animation">+1</span>}
+                {flair?.quality === 3 && (
+                  <span key={flair.id} className="flair-animation">
+                    +1
+                  </span>
+                )}
               </Button>
               <Button
                 variant="default"
@@ -427,15 +437,15 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
                 className="relative"
               >
                 Easy (4)
-                 {flair?.quality === 4 && <span key={flair.id} className="flair-animation">+2</span>}
+                {flair?.quality === 4 && (
+                  <span key={flair.id} className="flair-animation">
+                    +2
+                  </span>
+                )}
               </Button>
             </>
-          ) : (
-            <span className="text-muted-foreground">
-              Reveal the answer to rate your recall.
-            </span>
-          )}
-        </CardFooter>
+          </CardFooter>
+        )}
       </Card>
     );
   };
@@ -465,14 +475,14 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
         <div className="flip-card-inner">
           <div className="flip-card-front">
             {showInitialSkeleton ? (
-              <Card className="w-full flex flex-col"> {/* Removed h-full */} 
-                <CardContent className="flex-grow flex flex-col justify-center items-center py-4"> {/* Added padding */} 
-                  <Skeleton className="h-16 w-1/2 mx-auto mb-2" /> {/* Reduced margin */} 
-                  <Skeleton className="h-4 w-1/4 mx-auto mb-4" /> {/* Reduced margin */} 
+              <Card className="w-full flex flex-col h-full">
+                <CardContent className="flex-grow flex flex-col justify-center items-center py-4">
+                  <Skeleton className="h-16 w-1/2 mx-auto mb-2" />
+                  <Skeleton className="h-4 w-1/4 mx-auto mb-4" />
                   <Skeleton className="h-10 w-24" />
                 </CardContent>
-                <CardFooter className="flex justify-around pt-2 pb-4"> {/* Adjusted padding */} 
-                   <Skeleton className="h-6 w-1/2" />
+                <CardFooter className="flex justify-around pt-2 pb-4">
+                  <Skeleton className="h-6 w-1/2" />
                 </CardFooter>
               </Card>
             ) : (
@@ -482,19 +492,20 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
           <div className="flip-card-back">
             {showInitialSkeleton ? (
               // Skeleton for back face (can be similar or different)
-              <Card className="w-full flex flex-col"> {/* Removed h-full */} 
-                <CardContent className="flex-grow flex flex-col justify-center items-center py-4"> {/* Added padding */} 
+              <Card className="w-full flex flex-col">
+                <CardContent className="flex-grow flex flex-col justify-center items-center py-4">
+                  <Skeleton className="h-16 w-1/2 mx-auto mb-2" />
                   <Skeleton className="h-16 w-1/2 mx-auto mb-2" />
                   <Skeleton className="h-4 w-1/4 mx-auto mb-4" />
                   <Skeleton className="h-4 w-3/4 mb-2" />
                   <Skeleton className="h-4 w-3/4 mb-2" />
                   <Skeleton className="h-4 w-1/2 mb-4" />
                 </CardContent>
-                <CardFooter className="flex justify-around pt-2 pb-4"> {/* Adjusted padding */} 
-                   <Skeleton className="h-10 w-16" />
-                   <Skeleton className="h-10 w-16" />
-                   <Skeleton className="h-10 w-16" />
-                   <Skeleton className="h-10 w-16" />
+                <CardFooter className="flex justify-around pt-2 pb-4">
+                  <Skeleton className="h-10 w-16" />
+                  <Skeleton className="h-10 w-16" />
+                  <Skeleton className="h-10 w-16" />
+                  <Skeleton className="h-10 w-16" />
                 </CardFooter>
               </Card>
             ) : (
@@ -506,4 +517,3 @@ export function Flashcard({ token, onReviewComplete }: FlashcardProps) {
     </div>
   );
 }
-
