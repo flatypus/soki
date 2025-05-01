@@ -127,32 +127,66 @@ export async function GET(request: NextRequest) {
 
 
     // --- Fetch ALL reviewed items for the grid display ---
-    const allReviewedKanji = await db.query.userKanjiProgress.findMany({
-      where: eq(userKanjiProgress.userId, userId),
-      with: {
-        kanji: {
-          columns: { // Select ALL necessary columns for the dialog
-            id: true,
-            character: true,
-            definitions: true,
-            readings: true,
-            grade: true,
-            jlptLevel: true,
-            strokeCount: true,
-            frequency: true,
+    let rawReviewedKanji;
+    if (kanjiSortBy === "frequency_asc" || kanjiSortBy === "frequency_desc") {
+      // Use explicit join for frequency sorting
+      rawReviewedKanji = await db
+        .select() // Select all columns from both tables
+        .from(userKanjiProgress)
+        .leftJoin(kanji, eq(userKanjiProgress.kanjiId, kanji.id))
+        .where(eq(userKanjiProgress.userId, userId))
+        .orderBy(kanjiOrderBy) // Apply dynamic sorting (now works for frequency)
+        .limit(pageSize)
+        .offset(offsetKanji);
+    } else {
+      // Use findMany with 'with' for other sorting options
+      rawReviewedKanji = await db.query.userKanjiProgress.findMany({
+        where: eq(userKanjiProgress.userId, userId),
+        with: {
+          kanji: {
+            columns: { // Select ALL necessary columns for the dialog
+              id: true,
+              character: true,
+              definitions: true,
+              readings: true,
+              grade: true,
+              jlptLevel: true,
+              strokeCount: true,
+              frequency: true,
+            },
           },
         },
-      },
-      columns: { // Select necessary columns from progress
-        kanjiId: true,
-        skill: true,
-        lastReviewed: true,
-        reviewCount: true, // Added reviewCount
-      },
-      orderBy: kanjiOrderBy, // Apply dynamic sorting
-      limit: pageSize,
-      offset: offsetKanji,
-    });
+        columns: { // Select necessary columns from progress
+          kanjiId: true,
+          skill: true,
+          lastReviewed: true,
+          reviewCount: true, // Added reviewCount
+        },
+        orderBy: kanjiOrderBy, // Apply dynamic sorting
+        limit: pageSize,
+        offset: offsetKanji,
+      });
+    }
+
+    // Normalize the structure before mapping
+    const allReviewedKanji = rawReviewedKanji.map(item => {
+        // Handle potential null kanji from leftJoin if a progress record exists without a matching kanji (shouldn't happen with foreign keys)
+        if (!item) return null; 
+
+        if (kanjiSortBy === "frequency_asc" || kanjiSortBy === "frequency_desc") {
+            // Structure from db.select() is { userKanjiProgress: {...}, kanji: {...} }
+            // Need to transform it to match findMany's structure { ..., kanji: {...} }
+            // Ensure userKanjiProgress and kanji are not null before spreading/accessing
+            if (!item.userKanjiProgress || !item.kanji) return null;
+            return {
+                ...item.userKanjiProgress, // Spread progress fields
+                kanji: item.kanji // Keep kanji details nested
+            };
+        } else {
+            // Structure from findMany is already correct
+            return item;
+        }
+    }).filter(item => item !== null); // Filter out any null items from normalization step
 
     const allReviewedPhrases = await db.query.userPhraseProgress.findMany({
         where: eq(userPhraseProgress.userId, userId),
