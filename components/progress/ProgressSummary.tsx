@@ -31,15 +31,20 @@ interface ProgressSummaryProps {
   token: string;
 }
 
-// Interface for items within the reviewedItems array (adjust based on actual API response)
+// Updated interface to match the full data returned by the backend API
 interface ReviewedItemDetail {
   id: number;
   character?: string; // For Kanji
   phrase?: string;    // For Phrases
   skill: string; // API sends as string
-  // Add other minimal fields if needed by the grid/dialog, fetched by the summary API
-  // The detailed fetch for the dialog might need to be separate if summary API doesn't provide enough
-  // For now, assume summary API provides enough for the grid display
+  definitions: string[];
+  readings: { word: string; reading: string }[];
+  grade?: number | null; // Kanji only
+  jlptLevel?: number | null;
+  strokeCount?: number | null; // Kanji only
+  frequency?: number | null; // Kanji only
+  lastReviewed: string | null; // API sends as string or null
+  reviewCount: number;
 }
 
 // Updated interface to match the backend response structure
@@ -49,41 +54,25 @@ interface ProgressData {
     learned: number;
     averageSkill: string; // API sends as string
     totalReviewed: number;
-    reviewedItems: ReviewedItemDetail[]; // Changed from kanjiDetails
+    currentPage: number; // Added for pagination
+    totalPages: number; // Added for pagination
+    reviewedItems: ReviewedItemDetail[];
   };
   phrases: {
     total: number;
     learned: number;
     averageSkill: string; // API sends as string
     totalReviewed: number;
-    reviewedItems: ReviewedItemDetail[]; // Changed from phraseDetails
+    currentPage: number; // Added for pagination
+    totalPages: number; // Added for pagination
+    reviewedItems: ReviewedItemDetail[];
   };
 }
 
-// --- Mock Detailed Data Interfaces (assuming separate fetch or more data in summary) ---
-// These are needed for the Dialog content. If summary API doesn't provide these,
-// the Dialog would need its own data fetching logic based on item ID.
-interface KanjiProgressDetailFull extends ReviewedItemDetail {
-  character: string;
-  definitions: string[];
-  grade: number | null;
-  jlptLevel: number | null;
-  readings: { word: string; reading: string }[];
-  strokeCount?: number | null;
-  frequency?: number | null;
-  lastReviewed: Date | null;
-  reviewCount: number;
-}
-
-interface PhraseProgressDetailFull extends ReviewedItemDetail {
-  phrase: string;
-  definitions: string[];
-  jlptLevel: number | null;
-  readings: { word: string; reading: string }[];
-  lastReviewed: Date | null;
-  reviewCount: number;
-}
-// --- End Mock Detailed Data Interfaces ---
+// --- Detailed Data Interfaces (No longer needed as summary API provides full details) ---
+// interface KanjiProgressDetailFull extends ReviewedItemDetail { ... }
+// interface PhraseProgressDetailFull extends ReviewedItemDetail { ... }
+// --- End Detailed Data Interfaces ---
 
 const API_ENDPOINT = "/api/progress/summary"; // Removed ?detailed=true as backend sends all reviewed now
 
@@ -94,14 +83,24 @@ export const ProgressSummary = forwardRef<
   const [summary, setSummary] = useState<ProgressData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // State to hold detailed data for the currently open dialog
-  const [dialogDetails, setDialogDetails] = useState<KanjiProgressDetailFull | PhraseProgressDetailFull | null>(null);
-  const [isDialogLoading, setIsDialogLoading] = useState(false);
+  // State for pagination
+  const [currentPageKanji, setCurrentPageKanji] = useState(1);
+  const [currentPagePhrase, setCurrentPagePhrase] = useState(1);
+  const [pageSize, setPageSize] = useState(50); // Match backend default
+  // State to hold the item currently selected for the dialog
+  const [selectedItem, setSelectedItem] = useState<ReviewedItemDetail | null>(null);
 
-  const fetchSummary = useCallback(async () => {
+  const fetchSummary = useCallback(async (pageKanji = currentPageKanji, pagePhrase = currentPagePhrase) => {
+    setIsLoading(true); // Set loading true when fetching new page
     setError(null);
     try {
-      const response = await fetch(API_ENDPOINT,
+      // Construct API endpoint with pagination parameters
+      const url = new URL(API_ENDPOINT, window.location.origin);
+      url.searchParams.append("pageKanji", pageKanji.toString());
+      url.searchParams.append("pagePhrase", pagePhrase.toString());
+      url.searchParams.append("pageSize", pageSize.toString());
+
+      const response = await fetch(url.toString(),
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -128,45 +127,10 @@ export const ProgressSummary = forwardRef<
     }
   }, [token]);
 
-  // Function to fetch detailed data for the dialog
-  // TODO: Implement actual API endpoint for fetching details by ID
-  const fetchDialogDetails = useCallback(async (id: number, type: "kanji" | "phrase") => {
-    setIsDialogLoading(true);
-    setDialogDetails(null); // Clear previous details
-    console.log(`Fetching details for ${type} ID: ${id}`);
-    // --- MOCK IMPLEMENTATION --- Replace with actual API call
-    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-    if (type === "kanji") {
-        const mockDetail: KanjiProgressDetailFull = {
-            id: id,
-            character: summary?.kanji.reviewedItems.find(i => i.id === id)?.character ?? "?",
-            skill: summary?.kanji.reviewedItems.find(i => i.id === id)?.skill ?? "0",
-            definitions: ["Mock Definition 1", "Mock Definition 2"],
-            grade: 1,
-            jlptLevel: 5,
-            readings: [{ word: "", reading: "モック" }],
-            strokeCount: 5,
-            frequency: 100,
-            lastReviewed: new Date(),
-            reviewCount: 3,
-        };
-        setDialogDetails(mockDetail);
-    } else {
-        const mockDetail: PhraseProgressDetailFull = {
-            id: id,
-            phrase: summary?.phrases.reviewedItems.find(i => i.id === id)?.phrase ?? "???",
-            skill: summary?.phrases.reviewedItems.find(i => i.id === id)?.skill ?? "0",
-            definitions: ["Mock Phrase Definition 1", "Mock Phrase Definition 2"],
-            jlptLevel: 4,
-            readings: [{ word: "", reading: "モックフレーズ" }],
-            lastReviewed: new Date(),
-            reviewCount: 2,
-        };
-        setDialogDetails(mockDetail);
-    }
-    // --- END MOCK IMPLEMENTATION ---
-    setIsDialogLoading(false);
-  }, [summary]); // Dependency on summary to access basic info for mock
+  // Function to set the selected item for the dialog
+  const handleItemClick = useCallback((item: ReviewedItemDetail) => {
+    setSelectedItem(item);
+  }, []);
 
   useImperativeHandle(ref, () => ({
     refreshSummary() {
@@ -176,8 +140,8 @@ export const ProgressSummary = forwardRef<
 
   useEffect(() => {
     setIsLoading(true);
-    fetchSummary();
-  }, [fetchSummary]);
+    fetchSummary(currentPageKanji, currentPagePhrase);
+  }, [fetchSummary, currentPageKanji, currentPagePhrase]); // Add page states to dependencies
 
   const calculatePercentage = (learned: number, total: number) => {
     return total > 0 ? Math.round((learned / total) * 100) : 0;
@@ -188,7 +152,7 @@ export const ProgressSummary = forwardRef<
     if (skill >= 0.95) return "bg-purple-600 hover:bg-purple-700";
     if (skill >= 0.8) return "bg-indigo-600 hover:bg-indigo-700";
     if (skill >= 0.6) return "bg-blue-500 hover:bg-blue-600";
-    if (skill >= 0.4) return "bg-orange-500 hover:bg-orange-600";
+    if (skill >= 0.4) return "bg-teal-500 hover:bg-teal-600"; // Replaced orange with teal
     if (skill > 0) return "bg-yellow-500 hover:bg-yellow-600";
     return "bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600";
   };
@@ -216,101 +180,148 @@ export const ProgressSummary = forwardRef<
           <Dialog key={`${type}-${item.id}`}>
             <DialogTrigger asChild>
               <button
-                onClick={() => fetchDialogDetails(item.id, type)} // Fetch details on click
-                className={`w-7 h-7 rounded-md flex items-center justify-center text-sm font-bold text-white transition-colors duration-150 ${getSkillColor(
+                onClick={() => handleItemClick(item)} // Use handleItemClick
+                className={`w-7 h-7 rounded-md flex items-center justify-center text-lg font-bold text-white transition-colors duration-150 leading-none ${getSkillColor(
                   item.skill, // Pass skill string
                 )}`}
                 title={type === "kanji" ? item.character : item.phrase}
               >
-                {/* Keep boxes blank */}
+                {/* Display character/phrase inside */} 
+                {type === "kanji" ? item.character : item.phrase}
               </button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
-              {isDialogLoading && <Skeleton className="h-48 w-full" />} {/* Loading state */}
-              {!isDialogLoading && dialogDetails && (
+              {/* Remove loading state, use selectedItem directly */}
+              {selectedItem && (
                 <>
                   <DialogHeader>
-                    <DialogTitle className="text-5xl text-center mb-3 font-serif">
+                    <DialogTitle className="text-5xl text-center mb-3">
                       {
-                        type === "kanji"
-                          ? (dialogDetails as KanjiProgressDetailFull).character
-                          : (dialogDetails as PhraseProgressDetailFull).phrase
+                        selectedItem.character // Use selectedItem
+                          ? selectedItem.character
+                          : selectedItem.phrase
                       }
                     </DialogTitle>
                     <DialogDescription className="text-center space-x-1">
-                      {type === "kanji" && (dialogDetails as KanjiProgressDetailFull).grade && (
-                        <Badge variant="secondary">Grade {(dialogDetails as KanjiProgressDetailFull).grade}</Badge>
+                      {selectedItem.character && selectedItem.grade && (
+                        <Badge variant="secondary">Grade {selectedItem.grade}</Badge>
                       )}
-                      {dialogDetails.jlptLevel && (
-                        <Badge variant="secondary">JLPT N{dialogDetails.jlptLevel}</Badge>
+                      {selectedItem.jlptLevel && (
+                        <Badge variant="secondary">JLPT N{selectedItem.jlptLevel}</Badge>
                       )}
-                      {type === "kanji" && (dialogDetails as KanjiProgressDetailFull).frequency !== 99999 && (dialogDetails as KanjiProgressDetailFull).frequency !== null && (
-                          <Badge variant="outline">Freq: {(dialogDetails as KanjiProgressDetailFull).frequency}</Badge>
+                      {selectedItem.character && selectedItem.frequency !== 99999 && selectedItem.frequency !== null && (
+                          <Badge variant="outline">Freq: {selectedItem.frequency}</Badge>
                         )}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-3 py-3 text-sm">
                     <div>
-                      <h4 className="font-medium text-gray-600 dark:text-gray-300 mb-1">Skill Level:</h4>
+                      <h4 className="font-medium text-gray-700 dark:text-gray-200 mb-1">Skill Level:</h4>
                       <Progress
-                        value={parseFloat(dialogDetails.skill) * 100} // Parse skill string
+                        value={parseFloat(selectedItem.skill) * 100} // Use selectedItem
                         className="w-full h-2 mb-1"
                       />
-                      <p className="text-xs text-muted-foreground dark:text-gray-400">
-                        {dialogDetails.skill} ({Math.round(parseFloat(dialogDetails.skill) * 100)}%)
+                      <p className="text-xs text-gray-600 dark:text-gray-300">
+                        {selectedItem.skill} ({Math.round(parseFloat(selectedItem.skill) * 100)}%)
                       </p>
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-600 dark:text-gray-300 mb-1">Readings:</h4>
+                      <h4 className="font-medium text-gray-700 dark:text-gray-200 mb-1">Readings:</h4>
                       <ul className="list-disc list-inside text-gray-700 dark:text-gray-200">
-                        {dialogDetails.readings?.map((r, index) => (
+                        {selectedItem.readings?.length > 0 ? selectedItem.readings.map((r, index) => (
                           <li key={index}>
                             {r.reading}{" "}
                             {r.word &&
                             r.word !==
-                              (type === "kanji"
-                                ? (dialogDetails as KanjiProgressDetailFull).character
-                                : (dialogDetails as PhraseProgressDetailFull).phrase)
+                              (selectedItem.character
+                                ? selectedItem.character
+                                : selectedItem.phrase)
                               ? `(${r.word})`
                               : ""}
                           </li>
-                        )) ?? <li>No readings available</li>}
+                        )) : <li>No readings available</li>}
                       </ul>
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-600 dark:text-gray-300 mb-1">Definitions:</h4>
+                      <h4 className="font-medium text-gray-700 dark:text-gray-200 mb-1">Definitions:</h4>
                       <ul className="list-disc list-inside text-gray-700 dark:text-gray-200">
-                        {dialogDetails.definitions?.slice(0, 5).map((def, index) => (
+                        {selectedItem.definitions?.length > 0 ? selectedItem.definitions.slice(0, 5).map((def, index) => (
                           <li key={index}>{def}</li>
-                        )) ?? <li>No definitions available</li>}
-                        {dialogDetails.definitions && dialogDetails.definitions.length > 5 && (
+                        )) : <li>No definitions available</li>}
+                        {selectedItem.definitions && selectedItem.definitions.length > 5 && (
                           <li className="text-muted-foreground dark:text-gray-400">...and more</li>
                         )}
                       </ul>
                     </div>
-                    {type === "kanji" && (dialogDetails as KanjiProgressDetailFull).strokeCount && (
+                    {selectedItem.character && selectedItem.strokeCount && (
                       <p className="text-xs text-muted-foreground dark:text-gray-400">
-                        Strokes: {(dialogDetails as KanjiProgressDetailFull).strokeCount}
+                        Strokes: {selectedItem.strokeCount}
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground dark:text-gray-400">
-                      Reviewed: {dialogDetails.reviewCount ?? 0} times
+                      Reviewed: {selectedItem.reviewCount ?? 0} times
                     </p>
                     <p className="text-xs text-muted-foreground dark:text-gray-400">
                       Last Reviewed:{" "}
-                      {dialogDetails.lastReviewed
-                        ? new Date(dialogDetails.lastReviewed).toLocaleDateString()
+                      {selectedItem.lastReviewed
+                        ? new Date(selectedItem.lastReviewed).toLocaleDateString()
                         : "Never"}
                     </p>
                   </div>
                 </>
               )}
-              {!isDialogLoading && !dialogDetails && (
-                  <p>Could not load details.</p> // Error state
+              {!selectedItem && (
+                  <p>Select an item to see details.</p> // Placeholder if no item selected
               )}
             </DialogContent>
           </Dialog>
         ))}
+      </div>
+    );
+  };
+
+  // Pagination handlers
+  const handlePageChangeKanji = (newPage: number) => {
+    if (newPage >= 1 && newPage <= (summary?.kanji.totalPages ?? 1)) {
+      setCurrentPageKanji(newPage);
+    }
+  };
+
+  const handlePageChangePhrase = (newPage: number) => {
+    if (newPage >= 1 && newPage <= (summary?.phrases.totalPages ?? 1)) {
+      setCurrentPagePhrase(newPage);
+    }
+  };
+
+  // Component to render pagination controls
+  const PaginationControls = ({ currentPage, totalPages, onPageChange }: {
+    currentPage: number;
+    totalPages: number;
+    onPageChange: (newPage: number) => void;
+  }) => {
+    if (totalPages <= 1) return null; // Don't show controls if only one page
+
+    return (
+      <div className="flex items-center justify-center space-x-2 mt-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage <= 1}
+        >
+          Previous
+        </Button>
+        <span className="text-sm text-muted-foreground">
+          Page {currentPage} of {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage >= totalPages}
+        >
+          Next
+        </Button>
       </div>
     );
   };
@@ -403,7 +414,12 @@ export const ProgressSummary = forwardRef<
           <div className="mt-3">
             {/* Pass the correct data path */}
             {renderProgressGrid(summary.kanji.reviewedItems, "kanji")}
-          </div>
+            <PaginationControls
+              currentPage={summary.kanji.currentPage}
+              totalPages={summary.kanji.totalPages}
+              onPageChange={handlePageChangeKanji}
+            />
+        </div>
         </div>
         <div>
           <h4 className="font-semibold mb-2 text-base text-gray-700 dark:text-gray-200">
@@ -424,7 +440,12 @@ export const ProgressSummary = forwardRef<
           <div className="mt-3">
             {/* Pass the correct data path */}
             {renderProgressGrid(summary.phrases.reviewedItems, "phrase")}
-          </div>
+            <PaginationControls
+              currentPage={summary.phrases.currentPage}
+              totalPages={summary.phrases.totalPages}
+              onPageChange={handlePageChangePhrase}
+            />
+        </div>
         </div>
       </CardContent>
     </Card>

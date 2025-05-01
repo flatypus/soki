@@ -21,6 +21,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Get pagination parameters from query string
+    const { searchParams } = new URL(request.url);
+    const pageKanji = parseInt(searchParams.get("pageKanji") || "1", 10);
+    const pagePhrase = parseInt(searchParams.get("pagePhrase") || "1", 10);
+    const pageSize = parseInt(searchParams.get("pageSize") || "50", 10); // Default page size 50
+
+    const offsetKanji = (pageKanji - 1) * pageSize;
+    const offsetPhrase = (pagePhrase - 1) * pageSize;
+
     // --- Kanji Progress ---
     const kanjiStats = await db
       .select({
@@ -38,6 +47,11 @@ export async function GET(request: NextRequest) {
       })
       .from(userKanjiProgress)
       .where(eq(userKanjiProgress.userId, userId));
+
+    // Get total reviewed counts for pagination
+    const totalReviewedKanjiCount = userKanjiStats[0]?.totalReviewed ?? 0;
+    const totalPagesKanji = Math.ceil(totalReviewedKanjiCount / pageSize);
+
 
     // --- Phrase Progress ---
     const phraseStats = await db
@@ -57,46 +71,61 @@ export async function GET(request: NextRequest) {
       .from(userPhraseProgress)
       .where(eq(userPhraseProgress.userId, userId));
 
+    // Get total reviewed counts for pagination
+    const totalReviewedPhraseCount = userPhraseStats[0]?.totalReviewed ?? 0;
+    const totalPagesPhrase = Math.ceil(totalReviewedPhraseCount / pageSize);
+
+
     // --- Fetch ALL reviewed items for the grid display ---
     const allReviewedKanji = await db.query.userKanjiProgress.findMany({
       where: eq(userKanjiProgress.userId, userId),
       with: {
         kanji: {
-          columns: { // Select only necessary columns for the grid
+          columns: { // Select ALL necessary columns for the dialog
             id: true,
             character: true,
+            definitions: true,
+            readings: true,
             grade: true,
             jlptLevel: true,
+            strokeCount: true,
+            frequency: true,
           },
         },
       },
-      columns: { // Select only necessary columns from progress
+      columns: { // Select necessary columns from progress
         kanjiId: true,
         skill: true,
         lastReviewed: true,
+        reviewCount: true, // Added reviewCount
       },
       orderBy: [desc(userKanjiProgress.lastReviewed)], // Order by last reviewed
-      // Potentially add limit/pagination if the number of reviewed items can be very large
+      limit: pageSize,
+      offset: offsetKanji,
     });
 
     const allReviewedPhrases = await db.query.userPhraseProgress.findMany({
         where: eq(userPhraseProgress.userId, userId),
         with: {
             phrase: {
-                columns: { // Select only necessary columns for the grid
+                columns: { // Select ALL necessary columns for the dialog
                     id: true,
                     phrase: true,
+                    definitions: true,
+                    readings: true,
                     jlptLevel: true,
                 }
             }
         },
-        columns: { // Select only necessary columns from progress
+        columns: { // Select necessary columns from progress
             phraseId: true,
             skill: true,
             lastReviewed: true,
+            reviewCount: true, // Added reviewCount
         },
         orderBy: [desc(userPhraseProgress.lastReviewed)],
-        // Potentially add limit/pagination
+        limit: pageSize,
+        offset: offsetPhrase,
     });
 
     const summary = {
@@ -106,15 +135,25 @@ export async function GET(request: NextRequest) {
         averageSkill: parseFloat(
           userKanjiStats[0]?.averageSkill ?? "0",
         ).toFixed(2),
-        totalReviewed: userKanjiStats[0]?.totalReviewed ?? 0,
-        // Add all reviewed kanji data for the grid
+        totalReviewed: totalReviewedKanjiCount, // Use calculated total
+        currentPage: pageKanji,
+        totalPages: totalPagesKanji,
+        // Add paginated reviewed kanji data for the grid
         reviewedItems: allReviewedKanji
           .filter((item) => item.kanji !== null && item.kanji !== undefined)
           .map((item) => ({
             id: item.kanji!.id,
             character: item.kanji!.character,
             skill: item.skill,
-            // Add other minimal data needed for grid display if necessary
+            // Add ALL details for the dialog
+            definitions: item.kanji!.definitions,
+            readings: item.kanji!.readings,
+            grade: item.kanji!.grade,
+            jlptLevel: item.kanji!.jlptLevel,
+            strokeCount: item.kanji!.strokeCount,
+            frequency: item.kanji!.frequency,
+            lastReviewed: item.lastReviewed,
+            reviewCount: item.reviewCount, // Assuming reviewCount is available in userKanjiProgress
           })),
       },
       phrases: {
@@ -123,15 +162,22 @@ export async function GET(request: NextRequest) {
         averageSkill: parseFloat(
           userPhraseStats[0]?.averageSkill ?? "0",
         ).toFixed(2),
-        totalReviewed: userPhraseStats[0]?.totalReviewed ?? 0,
-        // Add all reviewed phrase data for the grid
+        totalReviewed: totalReviewedPhraseCount, // Use calculated total
+        currentPage: pagePhrase,
+        totalPages: totalPagesPhrase,
+        // Add paginated reviewed phrase data for the grid
         reviewedItems: allReviewedPhrases
           .filter((item) => item.phrase !== null && item.phrase !== undefined)
           .map((item) => ({
               id: item.phrase!.id,
               phrase: item.phrase!.phrase,
               skill: item.skill,
-              // Add other minimal data needed for grid display if necessary
+              // Add ALL details for the dialog
+              definitions: item.phrase!.definitions,
+              readings: item.phrase!.readings,
+              jlptLevel: item.phrase!.jlptLevel,
+              lastReviewed: item.lastReviewed,
+              reviewCount: item.reviewCount, // Added reviewCount
           })),
       },
     };
