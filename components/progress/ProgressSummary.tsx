@@ -147,6 +147,7 @@ export const ProgressSummary = forwardRef<
     return total > 0 ? Math.round((learned / total) * 100) : 0;
   };
 
+  /*
   const getSkillColor = (skillString: string): string => {
     const skill = parseFloat(skillString); // Parse skill string to number
     if (skill >= 0.95) return "bg-purple-600 hover:bg-purple-700";
@@ -156,6 +157,7 @@ export const ProgressSummary = forwardRef<
     if (skill > 0) return "bg-yellow-500 hover:bg-yellow-600";
     return "bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600";
   };
+  */
 
   const renderProgressGrid = (
     items: ReviewedItemDetail[], // Use updated interface
@@ -181,13 +183,19 @@ export const ProgressSummary = forwardRef<
             <DialogTrigger asChild>
               <button
                 onClick={() => handleItemClick(item)} // Use handleItemClick
-                className={`w-7 h-7 rounded-md flex items-center justify-center text-lg font-bold text-white transition-colors duration-150 leading-none ${getSkillColor(
-                  item.skill, // Pass skill string
-                )}`}
+                // Apply glass-filling effect styles
+                className="w-7 h-7 rounded-md flex items-center justify-center text-lg font-bold relative overflow-hidden border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 group hover:border-gray-400 dark:hover:border-gray-500 transition-colors duration-150"
                 title={type === "kanji" ? item.character : item.phrase}
               >
-                {/* Display character/phrase inside */} 
-                {type === "kanji" ? item.character : item.phrase}
+                {/* Inner div for fill effect */}
+                <div
+                  className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-blue-400 to-blue-600 dark:from-blue-500 dark:to-blue-700 transition-all duration-300 ease-in-out"
+                  style={{ height: `${parseFloat(item.skill) * 100}%` }}
+                ></div>
+                {/* Character/Phrase text, positioned above the fill */}
+                <span className="relative z-10 text-gray-800 dark:text-gray-100 group-hover:text-black dark:group-hover:text-white mix-blend-difference">
+                  {type === "kanji" ? item.character : item.phrase}
+                </span>
               </button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
@@ -202,7 +210,8 @@ export const ProgressSummary = forwardRef<
                           : selectedItem.phrase
                       }
                     </DialogTitle>
-                    <DialogDescription className="text-center space-x-1">
+                    <DialogDescription asChild className="text-center space-x-1">
+                      <div> {/* Render as div to allow Badge children */}
                       {selectedItem.character && selectedItem.grade && (
                         <Badge variant="secondary">Grade {selectedItem.grade}</Badge>
                       )}
@@ -212,6 +221,7 @@ export const ProgressSummary = forwardRef<
                       {selectedItem.character && selectedItem.frequency !== 99999 && selectedItem.frequency !== null && (
                           <Badge variant="outline">Freq: {selectedItem.frequency}</Badge>
                         )}
+                      </div>
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-3 py-3 text-sm">
